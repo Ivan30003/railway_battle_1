@@ -56,7 +56,7 @@ class MenuScene(Scene):
             bold=True,
         )
         renderer.draw_text(
-            "MILESTONE 1 — MAP & ROUTE",
+            "MILESTONE 2 — TRAIN & LAPS",
             13,
             theme.text_muted,
             (width // 2, height // 2 - 108),

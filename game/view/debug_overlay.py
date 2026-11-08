@@ -32,6 +32,15 @@ class DebugOverlay:
         config_path = app.config.source_path.name if app.config.source_path else "-"
         map_data = app.map_data
         map_name = map_data.source_path.name if map_data.source_path else "-"
+        train = getattr(scene, "train", None)
+        if train is None:
+            train_line = "train -"
+        else:
+            train_line = (
+                f"train {train.distance:.0f}/{train.route.total_length:.0f} px   "
+                f"laps {train.completed_laps}   wagons {train.wagon_count}   "
+                f"speed {train.speed:.0f} px/s"
+            )
 
         lines = [
             f"FPS {app.fps:5.1f}   frame {app.frame_ms:5.1f} ms   frame #{app.frame_index}",
@@ -43,6 +52,7 @@ class DebugOverlay:
             f"virtual ({mouse_virtual[0]:.1f}, {mouse_virtual[1]:.1f})",
             f"map {map_name}   {map_data.width}x{map_data.height} tiles   "
             f"route {len(map_data.route_tiles)} tiles / {map_data.route_length:.0f} px",
+            train_line,
             f"seed {app.seed}   config {config_path}",
             "F1 debug   B shop   Esc pause   M menu",
         ]

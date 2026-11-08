@@ -72,6 +72,7 @@ class GameConfig:
     train_speed: float
     wagon_spacing: float
     rounds_per_map: int
+    start_wagons: tuple[str, ...]
     start_gold: int
     wagon_base_cost: int
     wagon_cost_step: int
@@ -152,6 +153,7 @@ class GameConfig:
 
         wagon_configs = _parse_wagon_configs(_mapping(merged, "wagon_configs"), merged)
         monster_configs = _parse_monster_configs(_mapping(merged, "monster_configs"))
+        start_wagons = _parse_start_wagons(merged.get("start_wagons"), wagon_configs)
 
         ice_slow_per_wagon = _fraction(merged.get("ice_slow_per_wagon"), "ice_slow_per_wagon")
         ice_slow_max = _fraction(merged.get("ice_slow_max"), "ice_slow_max")
@@ -164,6 +166,7 @@ class GameConfig:
             train_speed=_positive_number(merged.get("train_speed"), "train_speed"),
             wagon_spacing=_positive_number(merged.get("wagon_spacing"), "wagon_spacing"),
             rounds_per_map=_positive_int(merged.get("rounds_per_map"), "rounds_per_map"),
+            start_wagons=start_wagons,
             start_gold=_non_negative_int(merged.get("start_gold"), "start_gold"),
             wagon_base_cost=_non_negative_int(merged.get("wagon_base_cost"), "wagon_base_cost"),
             wagon_cost_step=_non_negative_int(merged.get("wagon_cost_step"), "wagon_cost_step"),
@@ -243,6 +246,24 @@ def _parse_wagon_configs(raw: dict[str, Any], merged: dict[str, Any]) -> dict[st
             aoe_radius=aoe_radius,
         )
     return result
+
+
+def _parse_start_wagons(
+    value: Any,
+    wagon_configs: dict[str, WagonConfig],
+) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        raise ConfigError("start_wagons must be a list of wagon type names")
+    result: list[str] = []
+    for index, kind in enumerate(value):
+        if not isinstance(kind, str) or not kind.strip():
+            raise ConfigError(f"start_wagons[{index}] must be a non-empty string")
+        if kind not in wagon_configs:
+            raise ConfigError(
+                f"start_wagons[{index}] references unknown wagon type: {kind}"
+            )
+        result.append(kind)
+    return tuple(result)
 
 
 def _parse_monster_configs(raw: dict[str, Any]) -> dict[str, MonsterConfig]:
@@ -365,6 +386,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "train_speed": 70,
     "wagon_spacing": 44,
     "rounds_per_map": 5,
+    "start_wagons": ["MACHINEGUN", "ICE"],
     "start_gold": 0,
     "wagon_base_cost": 30,
     "wagon_cost_step": 10,

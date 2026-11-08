@@ -1,9 +1,8 @@
-"""Procedural rendering of the track map, route and debug marker."""
+"""Procedural rendering of the track map, start marker and debug route."""
 
 from __future__ import annotations
 
 from game.core.map_loader import MapData
-from game.core.path import RouteSample
 from game.core.tilemap import Direction
 from game.view.renderer import Renderer
 from game.view.theme import Theme
@@ -22,7 +21,6 @@ class TrackLayer:
         renderer: Renderer,
         map_data: MapData,
         *,
-        marker: RouteSample | None = None,
         debug: bool = False,
     ) -> None:
         width, height = renderer.virtual_size
@@ -32,8 +30,6 @@ class TrackLayer:
         self._draw_start(renderer, map_data, debug)
         if debug:
             self._draw_route_line(renderer, map_data)
-        if marker is not None:
-            self._draw_marker(renderer, map_data, marker)
 
     # ------------------------------------------------------------------
     # Layers
@@ -80,32 +76,6 @@ class TrackLayer:
                 points[(index + 1) % count],
                 1,
             )
-
-    def _draw_marker(
-        self,
-        renderer: Renderer,
-        map_data: MapData,
-        marker: RouteSample,
-    ) -> None:
-        tile_size = map_data.tile_size
-        radius = tile_size * 0.24
-        center = marker.position
-        direction = marker.direction
-        perpendicular = (-direction[1], direction[0])
-        nose = _offset(center, direction, radius * 1.1)
-        left = _offset(_offset(center, direction, -radius * 0.8), perpendicular, radius * 0.8)
-        right = _offset(_offset(center, direction, -radius * 0.8), perpendicular, -radius * 0.8)
-        renderer.draw_polygon(self.theme.marker_dark, (nose, left, right), 0)
-        inner_nose = _offset(center, direction, radius * 0.85)
-        inner_left = _offset(
-            _offset(center, direction, -radius * 0.6), perpendicular, radius * 0.6
-        )
-        inner_right = _offset(
-            _offset(center, direction, -radius * 0.6), perpendicular, -radius * 0.6
-        )
-        renderer.draw_polygon(self.theme.marker, (inner_nose, inner_left, inner_right), 0)
-        renderer.draw_circle(self.theme.marker_dark, center, max(2, radius * 0.28))
-        renderer.draw_circle(self.theme.marker, center, max(1, radius * 0.18))
 
     @staticmethod
     def _draw_arrow_head(

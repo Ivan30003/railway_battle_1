@@ -6,6 +6,7 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 import pygame
+import pytest
 
 from game.app.main import DEFAULT_CONFIG_PATH, App
 from game.core.config import GameConfig
@@ -33,22 +34,34 @@ def test_scene_navigation_and_shop_pause() -> None:
         game = app.scene_manager.current
         assert game.display_name == "Game"
         assert app.renderer.virtual_size == app.map_data.pixel_size
-        assert game.marker_distance == 0.0
+        assert game.train.travelled == 0.0
+        assert game.state.rounds_on_map == 0
+        assert game.train.wagon_count == len(config.start_wagons)
 
         game.update(0.5, app.input)
-        assert game.marker_distance > 0.0
+        assert game.train.travelled > 0.0
+        moved = game.train.travelled
 
         _press(app, pygame.K_b)
         assert game.state.phase == GamePhase.SHOP
+        game.update(1.0, app.input)
+        assert game.train.travelled == pytest.approx(moved)
 
         _press(app, pygame.K_ESCAPE)
         assert game.state.phase == GamePhase.PLAYING
 
         _press(app, pygame.K_ESCAPE)
         assert game.state.phase == GamePhase.PAUSED
+        game.update(1.0, app.input)
+        assert game.train.travelled == pytest.approx(moved)
 
         _press(app, pygame.K_ESCAPE)
         assert game.state.phase == GamePhase.PLAYING
+
+        game.train.travelled = game.map_data.route.total_length - 1.0
+        game.update(1.0, app.input)
+        assert game.state.rounds_on_map == 1
+        assert game._lap_flash > 0.0
 
         _press(app, pygame.K_m)
         assert app.scene_manager.current.display_name == "Menu"

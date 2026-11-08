@@ -9,6 +9,10 @@
   "train_speed": 70,
   "wagon_spacing": 44,
   "rounds_per_map": 5,
+  "start_wagons": [
+    "MACHINEGUN",
+    "ICE"
+  ],
   "start_gold": 0,
   "wagon_base_cost": 30,
   "wagon_cost_step": 10,

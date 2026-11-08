@@ -1,7 +1,7 @@
-"""Game scene: track map rendering and the moving debug marker.
+"""Game scene: track, moving train and lap counter.
 
-Milestone 1 only draws the validated map, its route and a marker travelling
-along the loop. There is still no train physics or combat.
+Milestone 2 draws a locomotive with wagons travelling along the validated loop
+at a constant speed and counts completed laps. There is still no combat.
 """
 
 from __future__ import annotations
@@ -10,11 +10,13 @@ import pygame
 
 from game.app.scene import Scene
 from game.core.game_state import GamePhase, GameState
+from game.core.train import Train
 from game.io.actions import Action
 from game.io.input import InputState
 from game.view.camera import Camera
 from game.view.renderer import Renderer
 from game.view.track_layer import TrackLayer
+from game.view.train_layer import TrainLayer
 from game.view.ui import Button
 
 _WAGON_LABELS = {
@@ -35,7 +37,14 @@ class GameScene(Scene):
         self.state = GameState(locomotive_hp=float(app.config.locomotive_hp))
         self.map_data = app.map_data
         self.track_layer = TrackLayer(app.theme)
-        self.marker_distance = 0.0
+        self.train_layer = TrainLayer(app.theme)
+        self.train = Train(
+            route=self.map_data.route,
+            speed=app.config.train_speed,
+            wagon_spacing=app.config.wagon_spacing,
+            wagons=list(app.config.start_wagons),
+        )
+        self._lap_flash = 0.0
         if start_in_shop:
             self.state.phase = GamePhase.SHOP
 
@@ -147,8 +156,12 @@ class GameScene(Scene):
         del input_state
         if self.state.phase != GamePhase.PLAYING:
             return
-        distance = self.marker_distance + self.app.config.train_speed * dt
-        self.marker_distance = self.map_data.route.wrap(distance)
+        laps = self.train.update(dt)
+        if laps:
+            self.state.rounds_on_map += laps
+            self._lap_flash = 0.8
+        elif self._lap_flash > 0.0:
+            self._lap_flash = max(0.0, self._lap_flash - dt)
 
     # ------------------------------------------------------------------
     # Rendering
@@ -165,13 +178,12 @@ class GameScene(Scene):
             button.enabled = self.state.gold >= price
 
     def _draw_world(self, renderer: Renderer) -> None:
-        marker = self.map_data.route.sample(self.marker_distance)
         self.track_layer.draw(
             renderer,
             self.map_data,
-            marker=marker,
             debug=self.app.debug_overlay.enabled,
         )
+        self.train_layer.draw(renderer, self.train, self.map_data.tile_size)
 
     def _draw_hud(self, renderer: Renderer) -> None:
         width, _ = renderer.virtual_size
@@ -190,7 +202,7 @@ class GameScene(Scene):
         renderer.draw_text(
             f"КРУГ  {self.state.rounds_on_map}/{self.app.config.rounds_per_map}",
             font_size,
-            theme.text,
+            theme.success if self._lap_flash > 0.0 else theme.text,
             (110, y),
         )
         renderer.draw_text(
@@ -206,7 +218,7 @@ class GameScene(Scene):
             (304, y),
         )
         renderer.draw_text(
-            "ВАГОНЫ  0",
+            f"ВАГОНЫ  {self.train.wagon_count}",
             font_size,
             theme.text,
             (432, y),

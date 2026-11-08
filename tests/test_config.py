@@ -19,6 +19,7 @@ def test_shipped_config_loads() -> None:
     assert config.window.resizable is True
     assert config.locomotive_hp == 100.0
     assert config.rounds_per_map == 5
+    assert config.start_wagons == ("MACHINEGUN", "ICE")
     assert config.start_gold == 0
     assert config.maps == ("maps/map1.txt", "maps/map2.txt")
     assert config.tile_size == 32
@@ -34,6 +35,7 @@ def test_empty_object_uses_defaults() -> None:
 
     assert config.window.width == 1280
     assert config.locomotive_hp == 100.0
+    assert config.start_wagons == ("MACHINEGUN", "ICE")
     assert config.cannon.range == 450.0
     assert len(config.wagon_configs) == 4
     assert len(config.monster_configs) == 2
@@ -79,6 +81,9 @@ def test_invalid_json_raises(tmp_path: Path) -> None:
         ({"ice_slow_max": 1.5}, "ice_slow_max"),
         ({"maps": []}, "maps"),
         ({"cannon": {"range": 0}}, "cannon.range"),
+        ({"start_wagons": "MACHINEGUN"}, "start_wagons"),
+        ({"start_wagons": ["UNKNOWN"]}, "unknown wagon type"),
+        ({"start_wagons": [1]}, r"start_wagons\[0\]"),
         ({"wagon_configs": {"UNKNOWN": {}}}, "Unknown wagon"),
         ({"wagon_configs": {"ICE": {"reserve": "sometimes"}}}, "reserve"),
         (
