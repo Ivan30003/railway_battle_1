@@ -1,0 +1,19 @@
+# Map 1: outer ring with a one-tile margin, 20 x 15 tiles.
+# START on the top-left corner, the train leaves eastwards.
+START=1,1
+DIR=RIGHT
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+0 RD SH SH SH SH SH SH SH SH SH SH SH SH SH SH SH SH LD 0
+0 SV 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 SV 0
+0 SV 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 SV 0
+0 SV 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 SV 0
+0 SV 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 SV 0
+0 SV 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 SV 0
+0 SV 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 SV 0
+0 SV 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 SV 0
+0 SV 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 SV 0
+0 SV 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 SV 0
+0 SV 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 SV 0
+0 SV 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 SV 0
+0 RU SH SH SH SH SH SH SH SH SH SH SH SH SH SH SH SH LU 0
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0

@@ -75,7 +75,7 @@ class EndScene(Scene):
             anchor="center",
         )
         renderer.draw_text(
-            "MILESTONE 0 — здесь будет итоговая статистика забега",
+            "Здесь будет итоговая статистика забега",
             12,
             theme.text_muted,
             (width // 2, height // 2 - 30),

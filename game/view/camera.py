@@ -40,7 +40,7 @@ def compute_letterbox(
 
 @dataclass
 class Camera:
-    """Static camera for milestone 0; later maps may keep it at (0, 0)."""
+    """Static camera; the map always fits the virtual canvas."""
 
     x: float = 0.0
     y: float = 0.0

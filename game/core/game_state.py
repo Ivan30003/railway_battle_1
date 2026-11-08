@@ -1,4 +1,4 @@
-"""Game state placeholders for milestone 0."""
+"""Game state placeholders."""
 
 from __future__ import annotations
 
@@ -16,10 +16,9 @@ class GamePhase(str, Enum):
 
 @dataclass
 class GameState:
-    """Minimal state container.
+    """Minimal state container shared by the scenes.
 
-    Milestone 0 only uses it to drive placeholder screens. The gameplay systems
-    will fill in the real values in later milestones.
+    The gameplay systems will fill in the real values in later milestones.
     """
 
     phase: GamePhase = GamePhase.PLAYING

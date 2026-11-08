@@ -104,6 +104,19 @@ class Renderer:
             width,
         )
 
+    def draw_polygon(
+        self,
+        color: Color,
+        points: list[Point] | tuple[Point, ...],
+        width: int = 0,
+    ) -> None:
+        pygame.draw.polygon(
+            self.surface,
+            color,
+            [(int(point[0]), int(point[1])) for point in points],
+            width,
+        )
+
     def draw_line(
         self,
         color: Color,

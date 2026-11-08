@@ -1,8 +1,7 @@
-"""Placeholder game scene for milestone 0.
+"""Game scene: track map rendering and the moving debug marker.
 
-The scene intentionally contains no simulation. It proves that the scene stack,
-HUD layout, shop overlay/pause states, input mapping and rendering pipeline work
-before the track, train and monsters are implemented.
+Milestone 1 only draws the validated map, its route and a marker travelling
+along the loop. There is still no train physics or combat.
 """
 
 from __future__ import annotations
@@ -15,6 +14,7 @@ from game.io.actions import Action
 from game.io.input import InputState
 from game.view.camera import Camera
 from game.view.renderer import Renderer
+from game.view.track_layer import TrackLayer
 from game.view.ui import Button
 
 _WAGON_LABELS = {
@@ -33,6 +33,9 @@ class GameScene(Scene):
         super().__init__(app)
         self.camera = Camera()
         self.state = GameState(locomotive_hp=float(app.config.locomotive_hp))
+        self.map_data = app.map_data
+        self.track_layer = TrackLayer(app.theme)
+        self.marker_distance = 0.0
         if start_in_shop:
             self.state.phase = GamePhase.SHOP
 
@@ -141,8 +144,11 @@ class GameScene(Scene):
                 self.app.scene_manager.request_scene("menu")
 
     def update(self, dt: float, input_state: InputState) -> None:
-        # No simulation yet. This method is the wiring point for milestone 1+.
-        del dt, input_state
+        del input_state
+        if self.state.phase != GamePhase.PLAYING:
+            return
+        distance = self.marker_distance + self.app.config.train_speed * dt
+        self.marker_distance = self.map_data.route.wrap(distance)
 
     # ------------------------------------------------------------------
     # Rendering
@@ -159,31 +165,12 @@ class GameScene(Scene):
             button.enabled = self.state.gold >= price
 
     def _draw_world(self, renderer: Renderer) -> None:
-        width, height = renderer.virtual_size
-        theme = renderer.theme
-        renderer.draw_rect(theme.world, (0, 0, width, height))
-
-        for x in range(0, width + 1, 32):
-            renderer.draw_line(theme.grid, (x, 40), (x, height), 1)
-        for y in range(40, height + 1, 32):
-            renderer.draw_line(theme.grid, (0, y), (width, y), 1)
-
-        field = pygame.Rect(32, 64, width - 64, height - 112)
-        renderer.draw_panel(field, theme.world, theme.panel_border, width=2, radius=8)
-        renderer.draw_text(
-            "ИГРОВОЕ ПОЛЕ",
-            28,
-            theme.text_muted,
-            (width // 2, height // 2 - 12),
-            anchor="center",
-            bold=True,
-        )
-        renderer.draw_text(
-            "MILESTONE 0 — карта, поезд и монстры появятся позже",
-            13,
-            theme.text_muted,
-            (width // 2, height // 2 + 24),
-            anchor="center",
+        marker = self.map_data.route.sample(self.marker_distance)
+        self.track_layer.draw(
+            renderer,
+            self.map_data,
+            marker=marker,
+            debug=self.app.debug_overlay.enabled,
         )
 
     def _draw_hud(self, renderer: Renderer) -> None:

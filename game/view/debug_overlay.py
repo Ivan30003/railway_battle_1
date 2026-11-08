@@ -30,6 +30,8 @@ class DebugOverlay:
         mouse_window = app.input.mouse_window
         mouse_virtual = app.input.mouse_virtual
         config_path = app.config.source_path.name if app.config.source_path else "-"
+        map_data = app.map_data
+        map_name = map_data.source_path.name if map_data.source_path else "-"
 
         lines = [
             f"FPS {app.fps:5.1f}   frame {app.frame_ms:5.1f} ms   frame #{app.frame_index}",
@@ -39,6 +41,8 @@ class DebugOverlay:
             f"scale {renderer.letterbox.scale:.3f}",
             f"mouse window ({mouse_window[0]}, {mouse_window[1]})   "
             f"virtual ({mouse_virtual[0]:.1f}, {mouse_virtual[1]:.1f})",
+            f"map {map_name}   {map_data.width}x{map_data.height} tiles   "
+            f"route {len(map_data.route_tiles)} tiles / {map_data.route_length:.0f} px",
             f"seed {app.seed}   config {config_path}",
             "F1 debug   B shop   Esc pause   M menu",
         ]

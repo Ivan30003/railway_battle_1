@@ -32,6 +32,11 @@ def test_scene_navigation_and_shop_pause() -> None:
 
         game = app.scene_manager.current
         assert game.display_name == "Game"
+        assert app.renderer.virtual_size == app.map_data.pixel_size
+        assert game.marker_distance == 0.0
+
+        game.update(0.5, app.input)
+        assert game.marker_distance > 0.0
 
         _press(app, pygame.K_b)
         assert game.state.phase == GamePhase.SHOP

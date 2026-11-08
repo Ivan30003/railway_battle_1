@@ -13,6 +13,8 @@ from game.app.loop import FixedTimestep
 from game.app.scene_manager import SceneManager
 from game.assets.loader import AssetLoader
 from game.core.config import ConfigError, GameConfig
+from game.core.errors import MapError
+from game.core.map_loader import MapData, load_map
 from game.io.actions import Action
 from game.io.input import InputState
 from game.view.debug_overlay import DebugOverlay
@@ -21,9 +23,16 @@ from game.view.theme import Theme
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "game.json"
-DEFAULT_MAP_TILES = (20, 15)
 
 _SCENE_CHOICES = ("menu", "game", "shop", "gameover", "victory")
+
+
+def _resolve_map_path(config: GameConfig, map_path: str | Path | None) -> Path:
+    if map_path is not None:
+        path = Path(map_path).expanduser()
+        return path if path.is_absolute() else Path.cwd() / path
+    spec = Path(config.maps[0]).expanduser()
+    return spec if spec.is_absolute() else PROJECT_ROOT / spec
 
 
 class App:
@@ -31,6 +40,7 @@ class App:
         self,
         config: GameConfig,
         *,
+        map_path: str | Path | None = None,
         debug: bool = False,
         initial_scene: str = "menu",
         seed: int = 0,
@@ -42,9 +52,14 @@ class App:
         self.fps = 0.0
         self.frame_ms = 0.0
 
+        self.map_data: MapData = load_map(
+            _resolve_map_path(config, map_path),
+            tile_size=config.tile_size,
+        )
+
         pygame.display.init()
         pygame.font.init()
-        pygame.display.set_caption("Паровоз — Milestone 0")
+        pygame.display.set_caption("Паровоз — Milestone 1")
         self._display_flags = pygame.DOUBLEBUF
         if config.window.resizable:
             self._display_flags |= pygame.RESIZABLE
@@ -53,11 +68,12 @@ class App:
 
         self.theme = Theme()
         self.assets = AssetLoader(Path(__file__).resolve().parents[1] / "assets")
-        virtual_size = (
-            config.tile_size * DEFAULT_MAP_TILES[0],
-            config.tile_size * DEFAULT_MAP_TILES[1],
+        self.renderer = Renderer(
+            self.window,
+            self.map_data.pixel_size,
+            self.assets,
+            self.theme,
         )
-        self.renderer = Renderer(self.window, virtual_size, self.assets, self.theme)
         self.input = InputState()
         self.debug_overlay = DebugOverlay(enabled=debug)
         self.scene_manager = SceneManager(self)
@@ -156,13 +172,19 @@ def _non_negative_int(value: str) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m game",
-        description="Паровоз — milestone 0 skeleton",
+        description="Паровоз — milestone 1: map, route and debug marker",
     )
     parser.add_argument(
         "--config",
         type=Path,
         default=DEFAULT_CONFIG_PATH,
         help="path to the JSON configuration file",
+    )
+    parser.add_argument(
+        "--map",
+        type=Path,
+        default=None,
+        help="map file to load (default: the first entry in config.maps)",
     )
     parser.add_argument(
         "--scene",
@@ -198,10 +220,15 @@ def main(argv: list[str] | None = None) -> int:
     try:
         app = App(
             config,
+            map_path=args.map,
             debug=args.debug,
             initial_scene=args.scene,
             seed=args.seed,
         )
+    except MapError as exc:
+        print(f"Map error: {exc}", file=sys.stderr)
+        pygame.quit()
+        return 2
     except pygame.error as exc:
         print(f"Failed to start pygame: {exc}", file=sys.stderr)
         pygame.quit()

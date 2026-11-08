@@ -1,0 +1,19 @@
+# Map 2: inset ring, 20 x 15 tiles.
+# Same loop shape as map 1 but offset, leaving room for future scenery.
+START=3,2
+DIR=RIGHT
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+0 0 0 RD SH SH SH SH SH SH SH SH SH SH SH SH LD 0 0 0
+0 0 0 SV 0 0 0 0 0 0 0 0 0 0 0 0 SV 0 0 0
+0 0 0 SV 0 0 0 0 0 0 0 0 0 0 0 0 SV 0 0 0
+0 0 0 SV 0 0 0 0 0 0 0 0 0 0 0 0 SV 0 0 0
+0 0 0 SV 0 0 0 0 0 0 0 0 0 0 0 0 SV 0 0 0
+0 0 0 SV 0 0 0 0 0 0 0 0 0 0 0 0 SV 0 0 0
+0 0 0 SV 0 0 0 0 0 0 0 0 0 0 0 0 SV 0 0 0
+0 0 0 SV 0 0 0 0 0 0 0 0 0 0 0 0 SV 0 0 0
+0 0 0 SV 0 0 0 0 0 0 0 0 0 0 0 0 SV 0 0 0
+0 0 0 SV 0 0 0 0 0 0 0 0 0 0 0 0 SV 0 0 0
+0 0 0 RU SH SH SH SH SH SH SH SH SH SH SH SH LU 0 0 0
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
