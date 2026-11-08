@@ -1,0 +1,106 @@
+{
+  "window": {
+    "width": 1280,
+    "height": 960,
+    "resizable": true,
+    "vsync": true
+  },
+  "tile_size": 32,
+  "train_speed": 70,
+  "wagon_spacing": 44,
+  "rounds_per_map": 5,
+  "start_gold": 0,
+  "wagon_base_cost": 30,
+  "wagon_cost_step": 10,
+  "locomotive_hp": 100,
+  "ice_slow_per_wagon": 0.2,
+  "ice_slow_max": 0.8,
+  "ice_slow_duration": 3.0,
+  "mortar_aoe_radius": 64,
+  "turret_aim_threshold_deg": 7,
+  "train_stop_per_crush_ms": 500,
+  "monster_hit_radius": 10,
+  "train_crush_radius": 18,
+  "monster_attack_range": 24,
+  "cannon": {
+    "damage": 30,
+    "fire_interval": 0.35,
+    "range": 450
+  },
+  "maps": [
+    "maps/map1.txt",
+    "maps/map2.txt"
+  ],
+  "spawn": {
+    "initial_interval": 2.0,
+    "min_interval": 0.35,
+    "ramp_seconds": 600,
+    "tank_share_start": 0.1,
+    "tank_share_max": 0.5,
+    "spawn_margin": 32
+  },
+  "wagon_configs": {
+    "MACHINEGUN": {
+      "radius": 150,
+      "rotation_speed_deg_per_sec": 360,
+      "fire_interval": 0.2,
+      "damage": 5,
+      "hp": 50,
+      "aim_threshold_deg": 7,
+      "priority": null,
+      "reserve": "target"
+    },
+    "ICE": {
+      "radius": 120,
+      "rotation_speed_deg_per_sec": 180,
+      "fire_interval": 1.0,
+      "damage": 2,
+      "hp": 40,
+      "aim_threshold_deg": 7,
+      "priority": null,
+      "reserve": "none",
+      "slow_percent": 0.2,
+      "aoe_radius": 48
+    },
+    "MORTAR": {
+      "radius": 200,
+      "rotation_speed_deg_per_sec": 90,
+      "fire_interval": 2.0,
+      "damage": 20,
+      "hp": 40,
+      "aim_threshold_deg": 7,
+      "priority": null,
+      "reserve": "primary",
+      "aoe_radius": 64
+    },
+    "SNIPER": {
+      "radius": 300,
+      "rotation_speed_deg_per_sec": 60,
+      "fire_interval": 3.0,
+      "damage": 50,
+      "hp": 30,
+      "aim_threshold_deg": 5,
+      "priority": [
+        "SLOW_TANK",
+        "FAST_WEAK"
+      ],
+      "reserve": "target"
+    }
+  },
+  "monster_configs": {
+    "FAST_WEAK": {
+      "hp": 10,
+      "speed": 80,
+      "gold": 1,
+      "damage": 5,
+      "attack_interval": 1.0
+    },
+    "SLOW_TANK": {
+      "hp": 50,
+      "speed": 30,
+      "gold": 5,
+      "damage": 15,
+      "attack_interval": 1.5
+    }
+  }
+}

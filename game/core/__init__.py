@@ -1,0 +1,1 @@
+"""Pure game logic package."""
