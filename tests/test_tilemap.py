@@ -41,7 +41,7 @@ def test_tile_connections(token: str, expected: set[Direction]) -> None:
 
 
 def test_empty_tile_is_not_path() -> None:
-    assert not Tile.from_token("0").is_path
+    assert not Tile.from_token("00").is_path
     assert Tile.from_token("SH").is_path
 
 

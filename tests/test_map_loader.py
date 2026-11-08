@@ -14,7 +14,7 @@ RING = """\
 START=0,0
 DIR=RIGHT
 RD SH LD
-SV 0 SV
+SV 00 SV
 RU SH LU
 """
 
@@ -22,16 +22,16 @@ CROSSING = """\
 START=0,0
 DIR=RIGHT
 RD X LD
-SV 0 SV
+SV 00 SV
 RU SH LU
 """
 
 FIGURE_EIGHT = """\
 START=1,1
 DIR=LEFT
-RD LD 0
+RD LD 00
 RU X LD
-0 RU LU
+00 RU LU
 """
 
 
@@ -75,11 +75,11 @@ def test_comments_bom_crlf_and_header_order() -> None:
         "DIR = right\r\n"
         "START = 1,1  # inline comment\r\n"
         "\r\n"
-        "0 0 0 0 0\r\n"
-        "0 RD SH LD 0\r\n"
-        "0 SV 0 SV 0\r\n"
-        "0 RU SH LU 0\r\n"
-        "0 0 0 0 0\r\n"
+        "00 00 00 00 00\r\n"
+        "00 RD SH LD 00\r\n"
+        "00 SV 00 SV 00\r\n"
+        "00 RU SH LU 00\r\n"
+        "00 00 00 00 00\r\n"
     )
 
     map_data = parse_map(text, tile_size=16)
@@ -119,13 +119,13 @@ def test_missing_file_raises(tmp_path: Path) -> None:
         ("DIR=RIGHT\nSH\n", "START"),
         ("START=0,0\nSH\n", "DIR"),
         ("START=5,0\nDIR=RIGHT\nSH\n", "outside"),
-        ("START=1,0\nDIR=LEFT\nSH 0\n", "empty tile"),
-        ("START=0,0\nDIR=UP\nRD SH LD\nSV 0 SV\nRU SH LU\n", "does not connect UP"),
-        ("START=0,0\nDIR=RIGHT\nSH SH\n0\n", "expected 2 tiles"),
+        ("START=1,0\nDIR=LEFT\nSH 00\n", "empty tile"),
+        ("START=0,0\nDIR=UP\nRD SH LD\nSV 00 SV\nRU SH LU\n", "does not connect UP"),
+        ("START=0,0\nDIR=RIGHT\nSH SH\n00\n", "expected 2 tiles"),
         ("START=0,0\nDIR=RIGHT\nZZ\n", "Unknown tile token"),
         ("START=0,0\nDIR=RIGHT\nSH SH\n", "leaves the map"),
         (
-            "START=0,0\nDIR=RIGHT\nRD SH LD\nSV 0 SV\nRU SH LU\n0 SH 0\n",
+            "START=0,0\nDIR=RIGHT\nRD SH LD\nSV 00 SV\nRU SH LU\n00 SH 00\n",
             "Stray track tile",
         ),
         ("START=0,0\nSTART=0,0\nDIR=RIGHT\nSH\n", "duplicate header"),

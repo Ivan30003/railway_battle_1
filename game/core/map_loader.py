@@ -6,7 +6,7 @@ Map format
     START=x,y
     DIR=RIGHT
     RD SH SH LD
-    SV 0  0  SV
+    SV 00 00 SV
     RU SH SH LU
 
 ``START`` is a zero-based column/row pair. ``DIR`` is one of ``UP``,

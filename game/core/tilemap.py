@@ -52,7 +52,7 @@ _HEADER_NAMES = {value: key for key, value in _HEADER_DIRECTIONS.items()}
 
 
 class Tile(Enum):
-    EMPTY = "0"
+    EMPTY = "00"
     STRAIGHT_VERTICAL = "SV"
     STRAIGHT_HORIZONTAL = "SH"
     CROSSING = "X"
