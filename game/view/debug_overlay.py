@@ -50,6 +50,15 @@ class DebugOverlay:
                 f"spawn {monsters.spawner.spawn_interval:.2f}s   "
                 f"slow {getattr(scene, '_crush_slow', 0.0):.2f}s   gold {scene.state.gold}"
             )
+        combat = getattr(scene, "combat", None)
+        if combat is None:
+            combat_line = "combat -"
+        else:
+            combat_line = (
+                f"combat turrets {len(combat.turrets)}   kills {combat.kills_total}   "
+                f"damage {combat.damage_total:.0f}   "
+                f"reserved {combat.reservations.count}"
+            )
 
         lines = [
             f"FPS {app.fps:5.1f}   frame {app.frame_ms:5.1f} ms   frame #{app.frame_index}",
@@ -63,6 +72,7 @@ class DebugOverlay:
             f"route {len(map_data.route_tiles)} tiles / {map_data.route_length:.0f} px",
             train_line,
             monster_line,
+            combat_line,
             f"seed {app.seed}   config {config_path}",
             "F1 debug   B shop   Esc pause   M menu",
         ]

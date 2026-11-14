@@ -89,6 +89,10 @@ def test_monsters_damage_crush_and_defeat() -> None:
     app = App(config, initial_scene="game")
     try:
         game = app.scene_manager.current
+        # This test checks monsters, crushing and defeat, so keep the guns out
+        # of the way.
+        game.combat.cannon.range = -1.0
+        game.combat.turrets.clear()
         locomotive = game.train.locomotive_sample()
         ahead = (
             locomotive.position[0] + locomotive.direction[0] * 34.0,
@@ -127,6 +131,33 @@ def test_monsters_damage_crush_and_defeat() -> None:
         game.update(0.01, app.input)
         assert game.state.locomotive_hp == 0.0
         assert game.state.phase == GamePhase.GAME_OVER
+    finally:
+        pygame.quit()
+
+
+def test_locomotive_cannon_kills_a_monster() -> None:
+    config = GameConfig.load(DEFAULT_CONFIG_PATH)
+    app = App(config, initial_scene="game")
+    try:
+        game = app.scene_manager.current
+        game.combat.turrets.clear()
+        locomotive = game.train.locomotive_sample()
+        ahead = (
+            locomotive.position[0] + locomotive.direction[0] * 60.0,
+            locomotive.position[1] + locomotive.direction[1] * 60.0,
+        )
+        game.monsters.monsters = [_fast_monster(ahead)]
+        hp = game.state.locomotive_hp
+        gold = game.state.gold
+
+        game.update(0.01, app.input)
+
+        assert game.monsters.monsters == []
+        assert game.state.gold == gold + 1
+        assert game.combat.kills_total == 1
+        assert game.state.locomotive_hp == pytest.approx(hp)
+        assert len(game.turret_layer.tracers) == 1
+        game.render(app.renderer)
     finally:
         pygame.quit()
 

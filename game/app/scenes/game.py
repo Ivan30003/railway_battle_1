@@ -1,8 +1,9 @@
-"""Game scene: track, moving train, monsters, damage and lap counter.
+"""Game scene: track, train, monsters, combat and lap counter.
 
-Milestone 3 adds monsters that spawn beside the route, chase the locomotive,
-damage it on contact and are crushed by a moving train. Crushing awards gold
-and briefly slows the train.
+Milestone 4 adds the locomotive cannon and wagon turrets. They acquire targets,
+reserve them, rotate their barrels and deal hitscan damage. Milestone 3 monsters
+still spawn beside the route, chase the locomotive, damage it on contact and are
+crushed by a moving train.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import random
 import pygame
 
 from game.app.scene import Scene
+from game.core.combat import CombatSystem
 from game.core.game_state import GamePhase, GameState
 from game.core.monsters import MonsterSystem
 from game.core.train import Train
@@ -22,6 +24,7 @@ from game.view.monster_layer import MonsterLayer
 from game.view.renderer import Renderer
 from game.view.track_layer import TrackLayer
 from game.view.train_layer import TrainLayer
+from game.view.turret_layer import TurretLayer
 from game.view.ui import Button
 
 _WAGON_LABELS = {
@@ -44,6 +47,7 @@ class GameScene(Scene):
         self.track_layer = TrackLayer(app.theme)
         self.train_layer = TrainLayer(app.theme)
         self.monster_layer = MonsterLayer(app.theme)
+        self.turret_layer = TurretLayer(app.theme)
         self.train = Train(
             route=self.map_data.route,
             speed=app.config.train_speed,
@@ -58,6 +62,12 @@ class GameScene(Scene):
             crush_radius=app.config.train_crush_radius,
             hit_radius=app.config.monster_hit_radius,
             rng=random.Random(app.seed),
+        )
+        self.combat = CombatSystem(
+            app.config.cannon,
+            app.config.wagon_configs,
+            list(app.config.start_wagons),
+            aim_threshold_deg=app.config.turret_aim_threshold_deg,
         )
         self._lap_flash = 0.0
         self._damage_flash = 0.0
@@ -197,6 +207,12 @@ class GameScene(Scene):
             self.state.locomotive_hp = max(0.0, self.state.locomotive_hp - result.damage)
             self._damage_flash = 0.45
 
+        combat = self.combat.update(dt, self.train, self.monsters.monsters)
+        self.turret_layer.add_shots(combat.shots)
+        self.turret_layer.update(dt)
+        if combat.gold:
+            self.state.gold += combat.gold
+
         if self.state.locomotive_hp <= 0.0:
             self.state.phase = GamePhase.GAME_OVER
             self.app.scene_manager.request_scene("gameover")
@@ -223,6 +239,8 @@ class GameScene(Scene):
         )
         self.monster_layer.draw(renderer, self.monsters.monsters)
         self.train_layer.draw(renderer, self.train, self.map_data.tile_size)
+        self.turret_layer.draw(renderer, self.combat, self.train, self.map_data.tile_size)
+        self.turret_layer.draw_tracers(renderer)
 
     def _draw_hud(self, renderer: Renderer) -> None:
         width, _ = renderer.virtual_size
