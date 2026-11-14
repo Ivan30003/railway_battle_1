@@ -56,7 +56,7 @@ class MenuScene(Scene):
             bold=True,
         )
         renderer.draw_text(
-            "MILESTONE 2 — TRAIN & LAPS",
+            "MILESTONE 3 — MONSTERS & CRUSH",
             13,
             theme.text_muted,
             (width // 2, height // 2 - 108),

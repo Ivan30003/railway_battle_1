@@ -30,3 +30,7 @@ class Theme:
     track_route: Color = (120, 230, 170)
     marker: Color = (232, 176, 74)
     marker_dark: Color = (96, 66, 24)
+    monster_fast: Color = (214, 100, 86)
+    monster_tank: Color = (150, 116, 214)
+    monster_outline: Color = (34, 26, 40)
+    monster_hp: Color = (220, 76, 76)

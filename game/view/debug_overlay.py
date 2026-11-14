@@ -41,6 +41,15 @@ class DebugOverlay:
                 f"laps {train.completed_laps}   wagons {train.wagon_count}   "
                 f"speed {train.speed:.0f} px/s"
             )
+        monsters = getattr(scene, "monsters", None)
+        if monsters is None:
+            monster_line = "monsters -"
+        else:
+            monster_line = (
+                f"monsters {len(monsters.monsters)}   crushed {monsters.crushed_total}   "
+                f"spawn {monsters.spawner.spawn_interval:.2f}s   "
+                f"slow {getattr(scene, '_crush_slow', 0.0):.2f}s   gold {scene.state.gold}"
+            )
 
         lines = [
             f"FPS {app.fps:5.1f}   frame {app.frame_ms:5.1f} ms   frame #{app.frame_index}",
@@ -53,6 +62,7 @@ class DebugOverlay:
             f"map {map_name}   {map_data.width}x{map_data.height} tiles   "
             f"route {len(map_data.route_tiles)} tiles / {map_data.route_length:.0f} px",
             train_line,
+            monster_line,
             f"seed {app.seed}   config {config_path}",
             "F1 debug   B shop   Esc pause   M menu",
         ]

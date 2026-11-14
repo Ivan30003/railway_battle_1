@@ -83,6 +83,7 @@ class GameConfig:
     mortar_aoe_radius: float
     turret_aim_threshold_deg: float
     train_stop_per_crush_ms: float
+    crush_slow_factor: float
     monster_hit_radius: float
     train_crush_radius: float
     monster_attack_range: float
@@ -184,6 +185,9 @@ class GameConfig:
             ),
             train_stop_per_crush_ms=_positive_number(
                 merged.get("train_stop_per_crush_ms"), "train_stop_per_crush_ms"
+            ),
+            crush_slow_factor=_fraction(
+                merged.get("crush_slow_factor"), "crush_slow_factor"
             ),
             monster_hit_radius=_positive_number(
                 merged.get("monster_hit_radius"), "monster_hit_radius"
@@ -397,6 +401,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "mortar_aoe_radius": 64,
     "turret_aim_threshold_deg": 7,
     "train_stop_per_crush_ms": 500,
+    "crush_slow_factor": 0.5,
     "monster_hit_radius": 10,
     "train_crush_radius": 18,
     "monster_attack_range": 24,

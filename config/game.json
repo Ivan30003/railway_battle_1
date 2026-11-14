@@ -23,6 +23,7 @@
   "mortar_aoe_radius": 64,
   "turret_aim_threshold_deg": 7,
   "train_stop_per_crush_ms": 500,
+  "crush_slow_factor": 0.5,
   "monster_hit_radius": 10,
   "train_crush_radius": 18,
   "monster_attack_range": 24,

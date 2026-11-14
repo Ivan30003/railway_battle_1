@@ -1,19 +1,24 @@
-"""Game scene: track, moving train and lap counter.
+"""Game scene: track, moving train, monsters, damage and lap counter.
 
-Milestone 2 draws a locomotive with wagons travelling along the validated loop
-at a constant speed and counts completed laps. There is still no combat.
+Milestone 3 adds monsters that spawn beside the route, chase the locomotive,
+damage it on contact and are crushed by a moving train. Crushing awards gold
+and briefly slows the train.
 """
 
 from __future__ import annotations
+
+import random
 
 import pygame
 
 from game.app.scene import Scene
 from game.core.game_state import GamePhase, GameState
+from game.core.monsters import MonsterSystem
 from game.core.train import Train
 from game.io.actions import Action
 from game.io.input import InputState
 from game.view.camera import Camera
+from game.view.monster_layer import MonsterLayer
 from game.view.renderer import Renderer
 from game.view.track_layer import TrackLayer
 from game.view.train_layer import TrainLayer
@@ -38,13 +43,25 @@ class GameScene(Scene):
         self.map_data = app.map_data
         self.track_layer = TrackLayer(app.theme)
         self.train_layer = TrainLayer(app.theme)
+        self.monster_layer = MonsterLayer(app.theme)
         self.train = Train(
             route=self.map_data.route,
             speed=app.config.train_speed,
             wagon_spacing=app.config.wagon_spacing,
             wagons=list(app.config.start_wagons),
         )
+        self.monsters = MonsterSystem(
+            self.map_data.route,
+            app.config.spawn,
+            app.config.monster_configs,
+            attack_range=app.config.monster_attack_range,
+            crush_radius=app.config.train_crush_radius,
+            hit_radius=app.config.monster_hit_radius,
+            rng=random.Random(app.seed),
+        )
         self._lap_flash = 0.0
+        self._damage_flash = 0.0
+        self._crush_slow = 0.0
         if start_in_shop:
             self.state.phase = GamePhase.SHOP
 
@@ -154,14 +171,35 @@ class GameScene(Scene):
 
     def update(self, dt: float, input_state: InputState) -> None:
         del input_state
-        if self.state.phase != GamePhase.PLAYING:
+        if self.state.phase != GamePhase.PLAYING or dt <= 0.0:
             return
-        laps = self.train.update(dt)
+
+        self._damage_flash = max(0.0, self._damage_flash - dt)
+        speed_scale = 1.0
+        if self._crush_slow > 0.0:
+            speed_scale = self.app.config.crush_slow_factor
+            self._crush_slow = max(0.0, self._crush_slow - dt)
+        train_moving = speed_scale > 0.0
+        laps = self.train.update(dt * speed_scale)
         if laps:
             self.state.rounds_on_map += laps
             self._lap_flash = 0.8
-        elif self._lap_flash > 0.0:
+        if laps == 0 and self._lap_flash > 0.0:
             self._lap_flash = max(0.0, self._lap_flash - dt)
+
+        result = self.monsters.update(dt, self.train, train_moving=train_moving)
+        if result.crushed:
+            seconds = self.app.config.train_stop_per_crush_ms / 1000.0
+            self._crush_slow += result.crushed * seconds
+        if result.gold:
+            self.state.gold += result.gold
+        if result.damage:
+            self.state.locomotive_hp = max(0.0, self.state.locomotive_hp - result.damage)
+            self._damage_flash = 0.45
+
+        if self.state.locomotive_hp <= 0.0:
+            self.state.phase = GamePhase.GAME_OVER
+            self.app.scene_manager.request_scene("gameover")
 
     # ------------------------------------------------------------------
     # Rendering
@@ -183,6 +221,7 @@ class GameScene(Scene):
             self.map_data,
             debug=self.app.debug_overlay.enabled,
         )
+        self.monster_layer.draw(renderer, self.monsters.monsters)
         self.train_layer.draw(renderer, self.train, self.map_data.tile_size)
 
     def _draw_hud(self, renderer: Renderer) -> None:
@@ -300,6 +339,17 @@ class GameScene(Scene):
         self._draw_hud(renderer)
 
         width, height = renderer.virtual_size
+        if self._damage_flash > 0.0:
+            renderer.draw_rect(renderer.theme.danger, (0, 0, width, height), width=4)
+        if self._crush_slow > 0.0:
+            renderer.draw_text(
+                f"ДАВКА — скорость {self.app.config.crush_slow_factor * 100:.0f}%"
+                f"   {self._crush_slow:.1f} с",
+                10,
+                renderer.theme.accent,
+                (width // 2, height - 36),
+                anchor="center",
+            )
         renderer.draw_text(
             "B — магазин   Esc — пауза   M — меню   F1 — debug",
             10,
