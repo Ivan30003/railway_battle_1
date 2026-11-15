@@ -81,7 +81,6 @@ class GameConfig:
     ice_slow_max: float
     ice_slow_duration: float
     mortar_aoe_radius: float
-    turret_aim_threshold_deg: float
     train_stop_per_crush_ms: float
     crush_slow_factor: float
     monster_hit_radius: float
@@ -179,9 +178,6 @@ class GameConfig:
             ),
             mortar_aoe_radius=_positive_number(
                 merged.get("mortar_aoe_radius"), "mortar_aoe_radius"
-            ),
-            turret_aim_threshold_deg=_positive_number(
-                merged.get("turret_aim_threshold_deg"), "turret_aim_threshold_deg"
             ),
             train_stop_per_crush_ms=_positive_number(
                 merged.get("train_stop_per_crush_ms"), "train_stop_per_crush_ms"
@@ -399,7 +395,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "ice_slow_max": 0.8,
     "ice_slow_duration": 3.0,
     "mortar_aoe_radius": 64,
-    "turret_aim_threshold_deg": 7,
     "train_stop_per_crush_ms": 500,
     "crush_slow_factor": 0.5,
     "monster_hit_radius": 10,

@@ -76,21 +76,15 @@ def _combat(
     configs: dict[str, WagonConfig] | None = None,
     *,
     cannon: CannonConfig | None = None,
-    aim_threshold_deg: float = 7.0,
-    disable_cannon: bool = True,
 ) -> CombatSystem:
     kinds = [] if wagons is None else wagons
     if configs is None:
         configs = {kind: _wagon() for kind in kinds}
-    system = CombatSystem(
+    return CombatSystem(
         cannon if cannon is not None else _cannon(),
         configs,
         kinds,
-        aim_threshold_deg=aim_threshold_deg,
     )
-    if disable_cannon:
-        system.cannon.range = -1.0
-    return system
 
 
 def _car_origin(train: Train, index: int) -> tuple[float, float]:
@@ -110,72 +104,131 @@ def _point_at(
 
 
 # ----------------------------------------------------------------------
-# Locomotive cannon
+# Locomotive cannon (player-controlled)
 # ----------------------------------------------------------------------
-def test_cannon_hits_the_nearest_monster_in_range() -> None:
-    system = _combat(cannon=_cannon(damage=10.0), disable_cannon=False)
-    near = _monster(position=(100.0, 0.0), hp=20.0)
-    far = _monster(position=(200.0, 0.0), hp=20.0)
+def test_cannon_follows_the_mouse_without_auto_firing() -> None:
+    system = _combat(cannon=_cannon(damage=10.0))
+    monster = _monster(position=(100.0, 0.0), hp=20.0)
 
-    result = system.update(0.01, _train(), [near, far])
+    result = system.update(0.01, _train(), [monster], aim_point=(0.0, 100.0))
 
-    assert near.hp == pytest.approx(10.0)
-    assert far.hp == pytest.approx(20.0)
+    assert system.cannon.angle_deg == pytest.approx(90.0)
+    assert result.shots == ()
+    assert monster.hp == pytest.approx(20.0)
+
+
+def test_cannon_fires_at_the_aimed_monster() -> None:
+    system = _combat(cannon=_cannon(damage=10.0))
+    monster = _monster(position=(100.0, 0.0), hp=20.0)
+
+    result = system.update(
+        0.01,
+        _train(),
+        [monster],
+        aim_point=(300.0, 0.0),
+        fire=True,
+    )
+
+    assert monster.hp == pytest.approx(10.0)
     assert result.damage == pytest.approx(10.0)
     assert len(result.shots) == 1
     assert result.shots[0].kind == "CANNON"
+    assert system.cannon.target is monster
 
 
-def test_cannon_ignores_monsters_out_of_range() -> None:
-    system = _combat(cannon=_cannon(range=100.0), disable_cannon=False)
-    monster = _monster(position=(500.0, 0.0))
+def test_cannon_misses_when_the_monster_is_not_on_the_aim_ray() -> None:
+    system = _combat(cannon=_cannon())
+    monster = _monster(position=(0.0, 100.0))
 
-    result = system.update(0.01, _train(), [monster])
+    result = system.update(
+        0.01,
+        _train(),
+        [monster],
+        aim_point=(300.0, 0.0),
+        fire=True,
+    )
 
     assert monster.hp == pytest.approx(10.0)
-    assert result.shots == ()
+    assert result.damage == 0.0
+    assert result.shots[0].target == pytest.approx((300.0, 0.0))
     assert system.cannon.target is None
 
 
+def test_cannon_hits_the_first_monster_on_the_aim_ray() -> None:
+    system = _combat(cannon=_cannon(damage=10.0))
+    near = _monster(position=(100.0, 0.0), hp=20.0)
+    far = _monster(position=(200.0, 0.0), hp=20.0)
+
+    result = system.update(
+        0.01,
+        _train(),
+        [near, far],
+        aim_point=(300.0, 0.0),
+        fire=True,
+    )
+
+    assert near.hp == pytest.approx(10.0)
+    assert far.hp == pytest.approx(20.0)
+    assert result.shots[0].target == pytest.approx(near.position)
+
+
+def test_cannon_ray_uses_the_monster_radius() -> None:
+    system = _combat(cannon=_cannon(damage=10.0))
+    clipped = _monster(position=(100.0, 9.0), hp=20.0)
+    missed = _monster(position=(100.0, 11.0), hp=20.0)
+
+    result = system.update(
+        0.01,
+        _train(),
+        [clipped, missed],
+        aim_point=(300.0, 0.0),
+        fire=True,
+    )
+
+    assert clipped.hp == pytest.approx(10.0)
+    assert missed.hp == pytest.approx(20.0)
+    assert result.shots[0].target == pytest.approx(clipped.position)
+
+
+def test_cannon_ignores_monsters_out_of_range() -> None:
+    system = _combat(cannon=_cannon(range=100.0))
+    monster = _monster(position=(500.0, 0.0))
+
+    result = system.update(
+        0.01,
+        _train(),
+        [monster],
+        aim_point=(500.0, 0.0),
+        fire=True,
+    )
+
+    assert monster.hp == pytest.approx(10.0)
+    assert result.shots[0].target == pytest.approx((100.0, 0.0))
+
+
 def test_cannon_waits_for_the_fire_interval() -> None:
-    system = _combat(cannon=_cannon(damage=30.0), disable_cannon=False)
+    system = _combat(cannon=_cannon(damage=30.0))
     monster = _monster(position=(100.0, 0.0), hp=100.0)
+    train = _train()
 
-    system.update(0.01, _train(), [monster])
+    system.update(0.01, train, [monster], aim_point=(100.0, 0.0), fire=True)
     assert monster.hp == pytest.approx(70.0)
 
-    system.update(0.1, _train(), [monster])
+    system.update(0.1, train, [monster], aim_point=(100.0, 0.0), fire=True)
     assert monster.hp == pytest.approx(70.0)
 
-    system.update(0.3, _train(), [monster])
+    system.update(0.3, train, [monster], aim_point=(100.0, 0.0), fire=True)
     assert monster.hp == pytest.approx(40.0)
 
 
-def test_cannon_rotates_towards_the_target_before_firing() -> None:
-    system = _combat(cannon=_cannon(damage=10.0), disable_cannon=False)
-    monster = _monster(position=(0.0, 100.0), hp=20.0)
+def test_cannon_does_not_fire_without_an_aim_point() -> None:
+    system = _combat(cannon=_cannon())
+    monster = _monster(position=(100.0, 0.0))
 
-    result = system.update(0.05, _train(), [monster])
+    result = system.update(0.01, _train(), [monster], fire=True)
 
-    assert system.cannon.angle_deg == pytest.approx(36.0)
     assert result.shots == ()
-
-    system.update(0.05, _train(), [monster])
-    system.update(0.05, _train(), [monster])
-
     assert monster.hp == pytest.approx(10.0)
-
-
-def test_cannon_respects_the_aim_threshold() -> None:
-    system = _combat(cannon=_cannon(), disable_cannon=False)
-    monster = _monster(position=(0.0, 100.0))
-    train = _train()
-
-    system.cannon.angle_deg = 80.0
-    assert system.update(0.001, train, [monster]).shots == ()
-
-    system.cannon.angle_deg = 88.0
-    assert len(system.update(0.001, train, [monster]).shots) == 1
 
 
 # ----------------------------------------------------------------------
@@ -355,11 +408,17 @@ def test_reservation_book_drops_stale_claims() -> None:
 # Kills and gold
 # ----------------------------------------------------------------------
 def test_killed_monsters_are_removed_and_reward_gold() -> None:
-    system = _combat(cannon=_cannon(damage=30.0), disable_cannon=False)
+    system = _combat(cannon=_cannon(damage=30.0))
     monster = _monster(position=(100.0, 0.0), hp=10.0, gold=7)
     monsters = [monster]
 
-    result = system.update(0.01, _train(), monsters)
+    result = system.update(
+        0.01,
+        _train(),
+        monsters,
+        aim_point=(100.0, 0.0),
+        fire=True,
+    )
 
     assert result.kills == 1
     assert result.gold == 7
@@ -369,11 +428,11 @@ def test_killed_monsters_are_removed_and_reward_gold() -> None:
 
 
 def test_dead_monsters_are_not_targeted_or_kept() -> None:
-    system = _combat(cannon=_cannon(damage=30.0), disable_cannon=False)
+    system = _combat(cannon=_cannon(damage=30.0))
     dead = _monster(position=(100.0, 0.0), hp=0.0)
     monsters = [dead]
 
-    result = system.update(0.01, _train(), monsters)
+    result = system.update(0.01, _train(), monsters, aim_point=(100.0, 0.0))
 
     assert result.shots == ()
     assert monsters == []

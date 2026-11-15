@@ -1,9 +1,10 @@
 """Locomotive cannon, wagon turrets and target reservation.
 
-The locomotive cannon automatically tracks the nearest monster in range. Wagon
-turrets rotate towards their target and fire only when the barrel is within
-``aim_threshold_deg`` of it. ``reserve`` makes a turret claim its target so
-other turrets pick different monsters:
+The locomotive cannon is aimed by the player towards a point (the mouse cursor)
+and fires only when the player asks it to. Wagon turrets acquire targets on
+their own, rotate towards them and fire only when the barrel is within
+``aim_threshold_deg`` of the target. ``reserve`` makes a turret claim its target
+so other turrets pick different monsters:
 
 * ``target`` — exclusive target;
 * ``primary`` — may take over a target claimed by a ``target`` turret and is
@@ -32,8 +33,6 @@ _RESERVE_LEVELS = {
     "target": RESERVE_TARGET,
     "primary": RESERVE_PRIMARY,
 }
-CANNON_ROTATION_SPEED_DEG_PER_SEC = 720.0
-_TRACER_LIFETIME = 0.08
 
 
 @dataclass(frozen=True)
@@ -113,8 +112,6 @@ class LocomotiveCannon:
     damage: float
     fire_interval: float
     range: float
-    aim_threshold_deg: float
-    rotation_speed_deg_per_sec: float = CANNON_ROTATION_SPEED_DEG_PER_SEC
     angle_deg: float | None = None
     cooldown: float = 0.0
     target: Monster | None = None
@@ -142,14 +139,11 @@ class CombatSystem:
         cannon: CannonConfig,
         wagon_configs: Mapping[str, WagonConfig],
         wagon_kinds: list[str],
-        *,
-        aim_threshold_deg: float,
     ) -> None:
         self.cannon = LocomotiveCannon(
             damage=cannon.damage,
             fire_interval=cannon.fire_interval,
             range=cannon.range,
-            aim_threshold_deg=aim_threshold_deg,
         )
         self.turrets: list[WagonTurret] = []
         for index, kind in enumerate(wagon_kinds):
@@ -166,8 +160,16 @@ class CombatSystem:
         dt: float,
         train: Train,
         monsters: list[Monster],
+        *,
+        aim_point: Point | None = None,
+        fire: bool = False,
     ) -> CombatUpdate:
-        """Advance aiming/firing and apply damage directly to ``monsters``."""
+        """Advance aiming/firing and apply damage directly to ``monsters``.
+
+        ``aim_point`` is the world position the player points at. The cannon
+        follows it and fires only when ``fire`` is true and its cooldown is
+        ready. Wagon turrets always act automatically.
+        """
         if dt <= 0.0:
             return CombatUpdate()
 
@@ -178,7 +180,14 @@ class CombatSystem:
         damage = 0.0
 
         if cars:
-            damage += self._update_cannon(dt, cars[0].sample, alive, shots)
+            damage += self._update_cannon(
+                dt,
+                cars[0].sample,
+                alive,
+                shots,
+                aim_point=aim_point,
+                fire=fire,
+            )
         for turret in self.turrets:
             car_index = turret.index + 1
             if car_index < len(cars):
@@ -209,28 +218,48 @@ class CombatSystem:
         sample: RouteSample,
         monsters: list[Monster],
         shots: list[Shot],
+        *,
+        aim_point: Point | None,
+        fire: bool,
     ) -> float:
         cannon = self.cannon
         cannon.cooldown = max(0.0, cannon.cooldown - dt)
-        if cannon.angle_deg is None:
-            cannon.angle_deg = _direction_angle(sample.direction)
+        cannon.target = None
 
-        target = self._nearest_target(sample.position, cannon.range, monsters)
-        cannon.target = target
-        if target is None:
+        if aim_point is None:
             return 0.0
 
-        desired = _angle_to(sample.position, target.position)
-        cannon.angle_deg = _rotate_toward(
-            cannon.angle_deg,
-            desired,
-            cannon.rotation_speed_deg_per_sec * dt,
+        direction = _unit_direction(sample.position, aim_point)
+        if direction is None:
+            return 0.0
+
+        cannon.angle_deg = _direction_angle(direction)
+        if not fire or cannon.cooldown > 0.0:
+            return 0.0
+
+        target = _first_monster_on_ray(
+            sample.position,
+            direction,
+            cannon.range,
+            monsters,
         )
-        if cannon.cooldown > 0.0:
-            return 0.0
-        if _angle_difference(cannon.angle_deg, desired) > cannon.aim_threshold_deg:
-            return 0.0
-        if not target.is_alive:
+        cannon.target = target
+        cannon.cooldown = cannon.fire_interval
+
+        if target is None:
+            distance = min(_distance(sample.position, aim_point), cannon.range)
+            end = (
+                sample.position[0] + direction[0] * distance,
+                sample.position[1] + direction[1] * distance,
+            )
+            shots.append(
+                Shot(
+                    origin=sample.position,
+                    target=end,
+                    damage=0.0,
+                    kind="CANNON",
+                )
+            )
             return 0.0
 
         dealt = _apply_damage(target, cannon.damage)
@@ -242,21 +271,7 @@ class CombatSystem:
                 kind="CANNON",
             )
         )
-        cannon.cooldown = cannon.fire_interval
         return dealt
-
-    @staticmethod
-    def _nearest_target(origin: Point, reach: float, monsters: list[Monster]) -> Monster | None:
-        candidates = [
-            monster
-            for monster in monsters
-            if monster.is_alive and _distance(origin, monster.position) <= reach
-        ]
-        return min(
-            candidates,
-            key=lambda monster: _distance(origin, monster.position),
-            default=None,
-        )
 
     # ------------------------------------------------------------------
     # Wagon turrets
@@ -368,6 +383,41 @@ def _apply_damage(monster: Monster, damage: float) -> float:
 
 def _distance(a: Point, b: Point) -> float:
     return math.hypot(a[0] - b[0], a[1] - b[1])
+
+
+def _unit_direction(origin: Point, target: Point) -> Point | None:
+    dx = target[0] - origin[0]
+    dy = target[1] - origin[1]
+    length = math.hypot(dx, dy)
+    if length <= 1e-9:
+        return None
+    return dx / length, dy / length
+
+
+def _first_monster_on_ray(
+    origin: Point,
+    direction: Point,
+    reach: float,
+    monsters: list[Monster],
+) -> Monster | None:
+    """Return the closest monster whose body intersects the aim ray."""
+    best: Monster | None = None
+    best_along = math.inf
+    for monster in monsters:
+        if not monster.is_alive:
+            continue
+        dx = monster.position[0] - origin[0]
+        dy = monster.position[1] - origin[1]
+        along = dx * direction[0] + dy * direction[1]
+        if along < 0.0 or along > reach + monster.radius:
+            continue
+        perpendicular = abs(dx * direction[1] - dy * direction[0])
+        if perpendicular > monster.radius:
+            continue
+        if along < best_along:
+            best_along = along
+            best = monster
+    return best
 
 
 def _angle_to(origin: Point, target: Point) -> float:

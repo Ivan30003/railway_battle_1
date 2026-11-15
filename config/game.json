@@ -21,7 +21,6 @@
   "ice_slow_max": 0.8,
   "ice_slow_duration": 3.0,
   "mortar_aoe_radius": 64,
-  "turret_aim_threshold_deg": 7,
   "train_stop_per_crush_ms": 500,
   "crush_slow_factor": 0.5,
   "monster_hit_radius": 10,

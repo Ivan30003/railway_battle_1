@@ -1,9 +1,10 @@
 """Game scene: track, train, monsters, combat and lap counter.
 
-Milestone 4 adds the locomotive cannon and wagon turrets. They acquire targets,
-reserve them, rotate their barrels and deal hitscan damage. Milestone 3 monsters
-still spawn beside the route, chase the locomotive, damage it on contact and are
-crushed by a moving train.
+Milestone 4 adds the locomotive cannon and wagon turrets. The player aims the
+cannon with the mouse and fires with the left button, while wagon turrets acquire
+and reserve targets on their own. Milestone 3 monsters still spawn beside the
+route, chase the locomotive, damage it on contact and are crushed by a moving
+train.
 """
 
 from __future__ import annotations
@@ -67,7 +68,6 @@ class GameScene(Scene):
             app.config.cannon,
             app.config.wagon_configs,
             list(app.config.start_wagons),
-            aim_threshold_deg=app.config.turret_aim_threshold_deg,
         )
         self._lap_flash = 0.0
         self._damage_flash = 0.0
@@ -180,7 +180,6 @@ class GameScene(Scene):
                 self.app.scene_manager.request_scene("menu")
 
     def update(self, dt: float, input_state: InputState) -> None:
-        del input_state
         if self.state.phase != GamePhase.PLAYING or dt <= 0.0:
             return
 
@@ -207,7 +206,13 @@ class GameScene(Scene):
             self.state.locomotive_hp = max(0.0, self.state.locomotive_hp - result.damage)
             self._damage_flash = 0.45
 
-        combat = self.combat.update(dt, self.train, self.monsters.monsters)
+        combat = self.combat.update(
+            dt,
+            self.train,
+            self.monsters.monsters,
+            aim_point=input_state.mouse_virtual,
+            fire=input_state.mouse_held(1),
+        )
         self.turret_layer.add_shots(combat.shots)
         self.turret_layer.update(dt)
         if combat.gold:

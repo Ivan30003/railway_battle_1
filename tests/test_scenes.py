@@ -149,6 +149,8 @@ def test_locomotive_cannon_kills_a_monster() -> None:
         game.monsters.monsters = [_fast_monster(ahead)]
         hp = game.state.locomotive_hp
         gold = game.state.gold
+        app.input.mouse_virtual = ahead
+        app.input.mouse_buttons_held.add(1)
 
         game.update(0.01, app.input)
 
