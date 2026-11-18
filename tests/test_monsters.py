@@ -199,6 +199,62 @@ def test_monster_moves_towards_the_locomotive() -> None:
     assert system.monsters[0].position == pytest.approx((0.0, 60.0))
 
 
+def test_slow_stacks_up_to_the_cap() -> None:
+    monster = _monster()
+
+    for _ in range(5):
+        monster.apply_slow(0.2, 3.0, max_percent=0.8)
+
+    assert monster.slow_percent == pytest.approx(0.8)
+    assert monster.slow_timer == pytest.approx(3.0)
+    assert monster.effective_speed == pytest.approx(80.0 * 0.2)
+
+
+def test_slow_reduces_movement_and_expires() -> None:
+    monster = _monster(position=(0.0, 200.0))
+    monster.apply_slow(0.5, 1.0, max_percent=0.8)
+    system = _system([monster])
+
+    system.update(0.5, _train(), train_moving=False)
+
+    assert monster.position == pytest.approx((0.0, 180.0))
+    assert monster.slow_timer == pytest.approx(0.5)
+    assert monster.is_slowed is True
+
+    system.update(0.6, _train(), train_moving=False)
+
+    assert monster.is_slowed is False
+    assert monster.slow_percent == pytest.approx(0.0)
+    assert monster.effective_speed == pytest.approx(80.0)
+
+
+def test_slow_timer_refreshes_on_a_new_hit() -> None:
+    monster = _monster()
+    monster.apply_slow(0.2, 1.0, max_percent=0.8)
+    monster.tick_slow(0.9)
+
+    monster.apply_slow(0.2, 3.0, max_percent=0.8)
+
+    assert monster.slow_timer == pytest.approx(3.0)
+    assert monster.slow_percent == pytest.approx(0.4)
+
+
+def test_slow_effect_is_cleared_after_expiring() -> None:
+    monster = _monster()
+    monster.apply_slow(0.4, 1.0, max_percent=0.8)
+
+    monster.tick_slow(1.0)
+
+    assert monster.slow_timer == pytest.approx(0.0)
+    assert monster.slow_percent == pytest.approx(0.0)
+    assert monster.is_slowed is False
+
+    monster.apply_slow(0.2, 3.0, max_percent=0.8)
+
+    assert monster.slow_percent == pytest.approx(0.2)
+    assert monster.slow_timer == pytest.approx(3.0)
+
+
 def test_monster_attacks_on_interval() -> None:
     system = _system([_monster(position=(0.0, 30.0))])
 

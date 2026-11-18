@@ -28,6 +28,13 @@ def test_shipped_config_loads() -> None:
     assert set(config.monster_configs) == {"FAST_WEAK", "SLOW_TANK"}
     assert config.wagon_configs["SNIPER"].priority == ("SLOW_TANK", "FAST_WEAK")
     assert config.wagon_configs["MORTAR"].reserve == "primary"
+    assert config.wagon_configs["MORTAR"].aoe_radius == 64.0
+    assert config.wagon_configs["ICE"].aoe_radius == 48.0
+    assert config.wagon_configs["ICE"].slow_percent == 0.2
+    assert config.ice_slow_per_wagon == 0.2
+    assert config.ice_slow_max == 0.8
+    assert config.ice_slow_duration == 3.0
+    assert config.mortar_aoe_radius == 64.0
     assert config.source_path == CONFIG_PATH
 
 
@@ -80,7 +87,11 @@ def test_invalid_json_raises(tmp_path: Path) -> None:
         ({"tile_size": -1}, "tile_size"),
         ({"tile_size": True}, "tile_size"),
         ({"window": {"resizable": "yes"}}, "window.resizable"),
+        ({"ice_slow_per_wagon": -0.1}, "ice_slow_per_wagon"),
         ({"ice_slow_max": 1.5}, "ice_slow_max"),
+        ({"mortar_aoe_radius": 0}, "mortar_aoe_radius"),
+        ({"wagon_configs": {"ICE": {"slow_percent": 1.5}}}, "slow_percent"),
+        ({"wagon_configs": {"MORTAR": {"aoe_radius": 0}}}, "aoe_radius"),
         ({"crush_slow_factor": 1.5}, "crush_slow_factor"),
         ({"crush_slow_factor": -0.1}, "crush_slow_factor"),
         ({"maps": []}, "maps"),

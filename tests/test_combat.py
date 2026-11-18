@@ -76,6 +76,10 @@ def _combat(
     configs: dict[str, WagonConfig] | None = None,
     *,
     cannon: CannonConfig | None = None,
+    ice_slow_per_wagon: float = 0.2,
+    ice_slow_max: float = 0.8,
+    ice_slow_duration: float = 3.0,
+    mortar_aoe_radius: float = 64.0,
 ) -> CombatSystem:
     kinds = [] if wagons is None else wagons
     if configs is None:
@@ -84,6 +88,10 @@ def _combat(
         cannon if cannon is not None else _cannon(),
         configs,
         kinds,
+        ice_slow_per_wagon=ice_slow_per_wagon,
+        ice_slow_max=ice_slow_max,
+        ice_slow_duration=ice_slow_duration,
+        mortar_aoe_radius=mortar_aoe_radius,
     )
 
 
@@ -305,6 +313,217 @@ def test_turret_without_priority_targets_the_nearest_monster() -> None:
     assert system.turrets[0].target is near
     assert near.hp == pytest.approx(95.0)
     assert far.hp == pytest.approx(100.0)
+
+
+# ----------------------------------------------------------------------
+# Mortar AoE
+# ----------------------------------------------------------------------
+def _aoe_system(
+    kind: str,
+    *,
+    config: WagonConfig | None = None,
+    **overrides: object,
+) -> tuple[CombatSystem, Train, tuple[float, float]]:
+    if config is None:
+        config = _wagon(
+            reserve="none" if kind == "ICE" else "primary",
+            damage=20.0,
+            aoe_radius=60.0,
+            fire_interval=2.0,
+        )
+    system = _combat([kind], {kind: config}, **overrides)  # type: ignore[arg-type]
+    train = _train([kind])
+    origin = _car_origin(train, 1)
+    system.turrets[0].angle_deg = 0.0
+    return system, train, origin
+
+
+def test_mortar_aoe_damages_every_monster_around_the_impact() -> None:
+    system, train, origin = _aoe_system("MORTAR")
+    target = _monster(position=_point_at(origin, 0.0, 60.0), hp=100.0)
+    splash = _monster(position=_point_at(origin, 0.0, 100.0), hp=100.0)
+    far = _monster(position=_point_at(origin, 0.0, 220.0), hp=100.0)
+
+    result = system.update(0.01, train, [target, splash, far])
+
+    assert target.hp == pytest.approx(80.0)
+    assert splash.hp == pytest.approx(80.0)
+    assert far.hp == pytest.approx(100.0)
+    assert result.damage == pytest.approx(40.0)
+    assert len(result.blasts) == 1
+    blast = result.blasts[0]
+    assert blast.kind == "MORTAR"
+    assert blast.position == pytest.approx(target.position)
+    assert blast.radius == pytest.approx(60.0)
+
+
+def test_mortar_aoe_uses_the_monster_radius() -> None:
+    system, train, origin = _aoe_system("MORTAR")
+    target = _monster(position=_point_at(origin, 0.0, 60.0), hp=100.0)
+    clipped = _monster(position=_point_at(origin, 0.0, 129.0), hp=100.0)
+    missed = _monster(position=_point_at(origin, 0.0, 131.0), hp=100.0)
+
+    system.update(0.01, train, [target, clipped, missed])
+
+    assert clipped.hp == pytest.approx(80.0)
+    assert missed.hp == pytest.approx(100.0)
+
+
+def test_mortar_aoe_falls_back_to_the_global_radius() -> None:
+    config = _wagon(
+        reserve="primary",
+        damage=20.0,
+        aoe_radius=None,
+        fire_interval=2.0,
+    )
+    system, train, origin = _aoe_system(
+        "MORTAR",
+        config=config,
+        mortar_aoe_radius=40.0,
+    )
+    target = _monster(position=_point_at(origin, 0.0, 60.0), hp=100.0)
+    near = _monster(position=_point_at(origin, 0.0, 100.0), hp=100.0)
+    far = _monster(position=_point_at(origin, 0.0, 115.0), hp=100.0)
+
+    result = system.update(0.01, train, [target, near, far])
+
+    assert near.hp == pytest.approx(80.0)
+    assert far.hp == pytest.approx(100.0)
+    assert result.blasts[0].radius == pytest.approx(40.0)
+
+
+def test_mortar_aoe_kills_reward_gold_for_every_victim() -> None:
+    config = _wagon(
+        reserve="primary",
+        damage=20.0,
+        aoe_radius=60.0,
+        fire_interval=2.0,
+    )
+    system, train, origin = _aoe_system("MORTAR", config=config)
+    target = _monster(position=_point_at(origin, 0.0, 60.0), hp=10.0, gold=3)
+    splash = _monster(position=_point_at(origin, 0.0, 90.0), hp=10.0, gold=5)
+    monsters = [target, splash]
+
+    result = system.update(0.01, train, monsters)
+
+    assert result.kills == 2
+    assert result.gold == 8
+    assert monsters == []
+
+
+# ----------------------------------------------------------------------
+# Ice slow
+# ----------------------------------------------------------------------
+def test_ice_slows_and_damages_monsters_in_its_aoe() -> None:
+    config = _wagon(
+        reserve="none",
+        damage=2.0,
+        aoe_radius=50.0,
+        slow_percent=0.2,
+        fire_interval=1.0,
+        rotation_speed_deg_per_sec=180.0,
+    )
+    system, train, origin = _aoe_system("ICE", config=config)
+    target = _monster(position=_point_at(origin, 0.0, 60.0), hp=100.0)
+    splash = _monster(position=_point_at(origin, 0.0, 90.0), hp=100.0)
+    outside = _monster(position=_point_at(origin, 0.0, 130.0), hp=100.0)
+
+    result = system.update(0.01, train, [target, splash, outside])
+
+    assert target.hp == pytest.approx(98.0)
+    assert splash.hp == pytest.approx(98.0)
+    assert outside.hp == pytest.approx(100.0)
+    assert result.damage == pytest.approx(4.0)
+    assert target.slow_percent == pytest.approx(0.2)
+    assert splash.slow_percent == pytest.approx(0.2)
+    assert target.slow_timer == pytest.approx(3.0)
+    assert outside.is_slowed is False
+    assert result.blasts[0].kind == "ICE"
+    assert result.blasts[0].radius == pytest.approx(50.0)
+
+
+def test_ice_uses_the_global_slow_when_the_wagon_has_none() -> None:
+    config = _wagon(
+        reserve="none",
+        damage=1.0,
+        aoe_radius=1.0,
+        slow_percent=None,
+        fire_interval=1.0,
+        rotation_speed_deg_per_sec=180.0,
+    )
+    system, train, origin = _aoe_system(
+        "ICE",
+        config=config,
+        ice_slow_per_wagon=0.35,
+        ice_slow_max=0.8,
+    )
+    target = _monster(position=_point_at(origin, 0.0, 60.0), hp=100.0)
+
+    system.update(0.01, train, [target])
+
+    assert target.slow_percent == pytest.approx(0.35)
+
+
+def test_ice_slow_stacks_up_to_the_cap_and_refreshes_the_timer() -> None:
+    config = _wagon(
+        reserve="none",
+        damage=1.0,
+        aoe_radius=1.0,
+        slow_percent=0.2,
+        fire_interval=1.0,
+        rotation_speed_deg_per_sec=180.0,
+    )
+    system, train, origin = _aoe_system(
+        "ICE",
+        config=config,
+        ice_slow_max=0.8,
+        ice_slow_duration=3.0,
+    )
+    target = _monster(position=_point_at(origin, 0.0, 60.0), hp=100.0)
+
+    for _ in range(4):
+        system.update(1.0, train, [target])
+    assert target.slow_percent == pytest.approx(0.8)
+
+    target.slow_timer = 0.5
+    system.update(1.0, train, [target])
+
+    assert target.slow_percent == pytest.approx(0.8)
+    assert target.slow_timer == pytest.approx(3.0)
+
+
+def test_ice_without_aoe_radius_still_slows_its_target() -> None:
+    config = _wagon(
+        reserve="none",
+        damage=1.0,
+        aoe_radius=None,
+        slow_percent=0.2,
+        fire_interval=1.0,
+        rotation_speed_deg_per_sec=180.0,
+    )
+    system, train, origin = _aoe_system("ICE", config=config)
+    target = _monster(position=_point_at(origin, 0.0, 60.0), hp=100.0)
+
+    result = system.update(0.01, train, [target])
+
+    assert target.hp == pytest.approx(99.0)
+    assert target.slow_percent == pytest.approx(0.2)
+    assert result.blasts == ()
+
+
+def test_non_aoe_turrets_do_not_slow_or_blast() -> None:
+    configs = {"MACHINEGUN": _wagon(damage=5.0, aoe_radius=None)}
+    system = _combat(["MACHINEGUN"], configs)
+    train = _train(["MACHINEGUN"])
+    origin = _car_origin(train, 1)
+    system.turrets[0].angle_deg = 0.0
+    target = _monster(position=_point_at(origin, 0.0, 60.0), hp=100.0)
+
+    result = system.update(0.01, train, [target])
+
+    assert target.hp == pytest.approx(95.0)
+    assert target.slow_percent == pytest.approx(0.0)
+    assert result.blasts == ()
 
 
 # ----------------------------------------------------------------------

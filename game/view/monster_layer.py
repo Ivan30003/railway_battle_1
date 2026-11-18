@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from game.core.monsters import TANK_KIND, Monster
 from game.view.renderer import Renderer
 from game.view.theme import Theme
@@ -42,8 +44,27 @@ class MonsterLayer:
             max(1.0, eye_radius * 0.5),
         )
 
+        if monster.is_slowed:
+            self._draw_slow_indicator(renderer, monster, radius)
+
         if monster.hp < monster.max_hp:
             self._draw_health_bar(renderer, monster, radius)
+
+    def _draw_slow_indicator(
+        self,
+        renderer: Renderer,
+        monster: Monster,
+        radius: float,
+    ) -> None:
+        center = monster.position
+        renderer.draw_circle(self.theme.slow, center, radius + 4.0, width=2)
+        for index in range(4):
+            angle = math.radians(45.0 + index * 90.0)
+            dx = math.cos(angle)
+            dy = math.sin(angle)
+            start = (center[0] + dx * (radius + 1.0), center[1] + dy * (radius + 1.0))
+            end = (center[0] + dx * (radius + 6.0), center[1] + dy * (radius + 6.0))
+            renderer.draw_line(self.theme.slow, start, end, 1)
 
     def _draw_health_bar(self, renderer: Renderer, monster: Monster, radius: float) -> None:
         width = max(12.0, radius * 2.4)

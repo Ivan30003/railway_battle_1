@@ -1,11 +1,11 @@
-"""Locomotive cannon, wagon turret barrels and short-lived shot tracers."""
+"""Locomotive cannon, wagon turret barrels, tracers and area-of-effect blasts."""
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
 
-from game.core.combat import CombatSystem, Shot
+from game.core.combat import Blast, CombatSystem, Shot
 from game.core.train import Train
 from game.view.renderer import Renderer
 from game.view.theme import Color, Theme
@@ -13,6 +13,7 @@ from game.view.theme import Color, Theme
 Point = tuple[float, float]
 
 TRACER_LIFETIME = 0.08
+BLAST_LIFETIME = 0.5
 
 _CANNON_COLOR: Color = (240, 214, 150)
 _TURRET_COLORS: dict[str, Color] = {
@@ -38,12 +39,23 @@ class Tracer:
     ttl: float = TRACER_LIFETIME
 
 
+@dataclass
+class BlastEffect:
+    """An expanding ring left by a mortar or ice impact."""
+
+    position: Point
+    radius: float
+    kind: str
+    ttl: float = BLAST_LIFETIME
+
+
 class TurretLayer:
-    """Draws rotating barrels and the tracers left by fired shots."""
+    """Draws rotating barrels, tracers and area-of-effect blasts."""
 
     def __init__(self, theme: Theme) -> None:
         self.theme = theme
         self.tracers: list[Tracer] = []
+        self.blasts: list[BlastEffect] = []
 
     def add_shots(self, shots: tuple[Shot, ...]) -> None:
         for shot in shots:
@@ -56,12 +68,25 @@ class TurretLayer:
                 )
             )
 
+    def add_blasts(self, blasts: tuple[Blast, ...]) -> None:
+        for blast in blasts:
+            self.blasts.append(
+                BlastEffect(
+                    position=blast.position,
+                    radius=blast.radius,
+                    kind=blast.kind,
+                )
+            )
+
     def update(self, dt: float) -> None:
-        if not self.tracers:
-            return
-        for tracer in self.tracers:
-            tracer.ttl -= dt
-        self.tracers = [tracer for tracer in self.tracers if tracer.ttl > 0.0]
+        if self.tracers:
+            for tracer in self.tracers:
+                tracer.ttl -= dt
+            self.tracers = [tracer for tracer in self.tracers if tracer.ttl > 0.0]
+        if self.blasts:
+            for blast in self.blasts:
+                blast.ttl -= dt
+            self.blasts = [blast for blast in self.blasts if blast.ttl > 0.0]
 
     def draw(
         self,
@@ -109,6 +134,47 @@ class TurretLayer:
             renderer.draw_line(tracer.color, tracer.start, tracer.end, width)
             renderer.draw_circle(tracer.color, tracer.end, 1.5 + 2.0 * fade)
 
+    def draw_effects(self, renderer: Renderer) -> None:
+        for blast in self.blasts:
+            fade = max(0.0, min(1.0, blast.ttl / BLAST_LIFETIME))
+            progress = 1.0 - fade
+            if blast.kind == "ICE":
+                self._draw_ice_blast(renderer, blast.position, blast.radius, progress)
+            else:
+                self._draw_mortar_blast(renderer, blast.position, blast.radius, progress)
+
+    def _draw_mortar_blast(
+        self,
+        renderer: Renderer,
+        center: Point,
+        radius: float,
+        progress: float,
+    ) -> None:
+        outer = radius * (0.45 + 0.55 * progress)
+        inner = radius * (0.2 + 0.35 * progress)
+        renderer.draw_circle(self.theme.blast_dim, center, outer, width=2)
+        renderer.draw_circle(self.theme.blast, center, inner, width=2)
+        core = max(2.0, radius * 0.18 * (1.0 - progress))
+        renderer.draw_circle(self.theme.blast, center, core)
+
+    def _draw_ice_blast(
+        self,
+        renderer: Renderer,
+        center: Point,
+        radius: float,
+        progress: float,
+    ) -> None:
+        outer = radius * (1.0 - 0.25 * progress)
+        renderer.draw_circle(self.theme.ice_dim, center, outer, width=2)
+        renderer.draw_circle(self.theme.ice, center, outer * 0.62, width=1)
+        for index in range(6):
+            angle = math.radians(index * 60.0 + progress * 30.0)
+            dx = math.cos(angle)
+            dy = math.sin(angle)
+            start = (center[0] + dx * outer * 0.3, center[1] + dy * outer * 0.3)
+            end = (center[0] + dx * outer * 0.92, center[1] + dy * outer * 0.92)
+            renderer.draw_line(self.theme.ice, start, end, 1)
+
     def _draw_barrel(
         self,
         renderer: Renderer,
@@ -136,4 +202,10 @@ def _direction_angle(direction: Point) -> float:
     return math.degrees(math.atan2(direction[1], direction[0])) % 360.0
 
 
-__all__ = ["TRACER_LIFETIME", "Tracer", "TurretLayer"]
+__all__ = [
+    "BLAST_LIFETIME",
+    "TRACER_LIFETIME",
+    "BlastEffect",
+    "Tracer",
+    "TurretLayer",
+]

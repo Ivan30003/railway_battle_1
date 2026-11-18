@@ -1,10 +1,9 @@
 """Game scene: track, train, monsters, combat and lap counter.
 
-Milestone 4 adds the locomotive cannon and wagon turrets. The player aims the
-cannon with the mouse and fires with the left button, while wagon turrets acquire
-and reserve targets on their own. Milestone 3 monsters still spawn beside the
-route, chase the locomotive, damage it on contact and are crushed by a moving
-train.
+Milestone 5 adds area-of-effect weapons: mortar shells damage every monster
+around the impact point and ice turrets splash damage plus a stacking slow. The
+player still aims the locomotive cannon with the mouse and wagon turrets acquire
+and reserve targets on their own.
 """
 
 from __future__ import annotations
@@ -68,6 +67,10 @@ class GameScene(Scene):
             app.config.cannon,
             app.config.wagon_configs,
             list(app.config.start_wagons),
+            ice_slow_per_wagon=app.config.ice_slow_per_wagon,
+            ice_slow_max=app.config.ice_slow_max,
+            ice_slow_duration=app.config.ice_slow_duration,
+            mortar_aoe_radius=app.config.mortar_aoe_radius,
         )
         self._lap_flash = 0.0
         self._damage_flash = 0.0
@@ -214,6 +217,7 @@ class GameScene(Scene):
             fire=input_state.mouse_held(1),
         )
         self.turret_layer.add_shots(combat.shots)
+        self.turret_layer.add_blasts(combat.blasts)
         self.turret_layer.update(dt)
         if combat.gold:
             self.state.gold += combat.gold
@@ -246,6 +250,7 @@ class GameScene(Scene):
         self.train_layer.draw(renderer, self.train, self.map_data.tile_size)
         self.turret_layer.draw(renderer, self.combat, self.train, self.map_data.tile_size)
         self.turret_layer.draw_tracers(renderer)
+        self.turret_layer.draw_effects(renderer)
 
     def _draw_hud(self, renderer: Renderer) -> None:
         width, _ = renderer.virtual_size

@@ -34,3 +34,8 @@ class Theme:
     monster_tank: Color = (150, 116, 214)
     monster_outline: Color = (34, 26, 40)
     monster_hp: Color = (220, 76, 76)
+    blast: Color = (238, 166, 84)
+    blast_dim: Color = (150, 96, 48)
+    ice: Color = (132, 208, 240)
+    ice_dim: Color = (64, 118, 150)
+    slow: Color = (144, 216, 246)

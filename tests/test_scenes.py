@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import dataclasses
+import math
 import os
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -38,6 +40,9 @@ def test_scene_navigation_and_shop_pause() -> None:
         assert game.train.travelled == 0.0
         assert game.state.rounds_on_map == 0
         assert game.train.wagon_count == len(config.start_wagons)
+        assert game.combat.ice_slow_max == config.ice_slow_max
+        assert game.combat.ice_slow_duration == config.ice_slow_duration
+        assert game.combat.mortar_aoe_radius == config.mortar_aoe_radius
 
         game.update(0.5, app.input)
         assert game.train.travelled > 0.0
@@ -159,6 +164,39 @@ def test_locomotive_cannon_kills_a_monster() -> None:
         assert game.combat.kills_total == 1
         assert game.state.locomotive_hp == pytest.approx(hp)
         assert len(game.turret_layer.tracers) == 1
+        game.render(app.renderer)
+    finally:
+        pygame.quit()
+
+
+def test_ice_turret_slows_monsters_and_spawns_a_blast() -> None:
+    config = dataclasses.replace(
+        GameConfig.load(DEFAULT_CONFIG_PATH),
+        start_wagons=("ICE",),
+    )
+    app = App(config, initial_scene="game")
+    try:
+        game = app.scene_manager.current
+        game.combat.cannon.range = -1.0
+        ice_car = game.train.car_samples()[1].sample
+        target_position = (
+            ice_car.position[0] - ice_car.direction[1] * 60.0,
+            ice_car.position[1] + ice_car.direction[0] * 60.0,
+        )
+        game.monsters.monsters = [_fast_monster(target_position)]
+        game.combat.turrets[0].angle_deg = math.degrees(
+            math.atan2(
+                target_position[1] - ice_car.position[1],
+                target_position[0] - ice_car.position[0],
+            )
+        ) % 360.0
+
+        game.update(0.01, app.input)
+
+        target = game.monsters.monsters[0]
+        assert target.slow_percent == pytest.approx(0.2)
+        assert target.slow_timer == pytest.approx(config.ice_slow_duration)
+        assert [blast.kind for blast in game.turret_layer.blasts] == ["ICE"]
         game.render(app.renderer)
     finally:
         pygame.quit()

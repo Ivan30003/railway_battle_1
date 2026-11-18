@@ -45,8 +45,10 @@ class DebugOverlay:
         if monsters is None:
             monster_line = "monsters -"
         else:
+            slowed = sum(1 for monster in monsters.monsters if monster.is_slowed)
             monster_line = (
-                f"monsters {len(monsters.monsters)}   crushed {monsters.crushed_total}   "
+                f"monsters {len(monsters.monsters)}   slowed {slowed}   "
+                f"crushed {monsters.crushed_total}   "
                 f"spawn {monsters.spawner.spawn_interval:.2f}s   "
                 f"slow {getattr(scene, '_crush_slow', 0.0):.2f}s   gold {scene.state.gold}"
             )

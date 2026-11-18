@@ -10,6 +10,10 @@ so other turrets pick different monsters:
 * ``primary`` — may take over a target claimed by a ``target`` turret and is
   exclusive among other ``primary`` turrets;
 * ``none`` — ignores all reservations and does not reserve anything.
+
+``MORTAR`` and ``ICE`` turrets deal splash damage to every monster around the
+impact point. ``ICE`` additionally stacks a slow effect (up to
+``ice_slow_max``) and refreshes its duration on every hit.
 """
 
 from __future__ import annotations
@@ -47,10 +51,21 @@ class Shot:
 
 
 @dataclass(frozen=True)
+class Blast:
+    """An area-of-effect impact used for visual effects."""
+
+    position: Point
+    radius: float
+    kind: str
+    damage: float = 0.0
+
+
+@dataclass(frozen=True)
 class CombatUpdate:
     """Outcome of one combat tick."""
 
     shots: tuple[Shot, ...] = ()
+    blasts: tuple[Blast, ...] = ()
     damage: float = 0.0
     kills: int = 0
     gold: int = 0
@@ -139,12 +154,21 @@ class CombatSystem:
         cannon: CannonConfig,
         wagon_configs: Mapping[str, WagonConfig],
         wagon_kinds: list[str],
+        *,
+        ice_slow_per_wagon: float = 0.2,
+        ice_slow_max: float = 0.8,
+        ice_slow_duration: float = 3.0,
+        mortar_aoe_radius: float = 64.0,
     ) -> None:
         self.cannon = LocomotiveCannon(
             damage=cannon.damage,
             fire_interval=cannon.fire_interval,
             range=cannon.range,
         )
+        self.ice_slow_per_wagon = ice_slow_per_wagon
+        self.ice_slow_max = ice_slow_max
+        self.ice_slow_duration = ice_slow_duration
+        self.mortar_aoe_radius = mortar_aoe_radius
         self.turrets: list[WagonTurret] = []
         for index, kind in enumerate(wagon_kinds):
             config = wagon_configs.get(kind)
@@ -177,6 +201,7 @@ class CombatSystem:
         self.reservations.retain({id(monster) for monster in alive})
         cars = train.car_samples()
         shots: list[Shot] = []
+        blasts: list[Blast] = []
         damage = 0.0
 
         if cars:
@@ -191,7 +216,14 @@ class CombatSystem:
         for turret in self.turrets:
             car_index = turret.index + 1
             if car_index < len(cars):
-                damage += self._update_turret(dt, turret, cars[car_index].sample, alive, shots)
+                damage += self._update_turret(
+                    dt,
+                    turret,
+                    cars[car_index].sample,
+                    alive,
+                    shots,
+                    blasts,
+                )
             else:
                 if turret.target is not None:
                     self.reservations.release(turret.index)
@@ -204,6 +236,7 @@ class CombatSystem:
         self.damage_total += damage
         return CombatUpdate(
             shots=tuple(shots),
+            blasts=tuple(blasts),
             damage=damage,
             kills=len(killed),
             gold=gold,
@@ -283,6 +316,7 @@ class CombatSystem:
         sample: RouteSample,
         monsters: list[Monster],
         shots: list[Shot],
+        blasts: list[Blast],
     ) -> float:
         turret.cooldown = max(0.0, turret.cooldown - dt)
         if turret.angle_deg is None:
@@ -312,7 +346,7 @@ class CombatSystem:
         if not target.is_alive:
             return 0.0
 
-        dealt = _apply_damage(target, turret.config.damage)
+        turret.cooldown = turret.config.fire_interval
         shots.append(
             Shot(
                 origin=sample.position,
@@ -322,8 +356,68 @@ class CombatSystem:
                 wagon_index=turret.index,
             )
         )
-        turret.cooldown = turret.config.fire_interval
-        return dealt
+        return self._apply_hit(turret, target, monsters, blasts)
+
+    def _apply_hit(
+        self,
+        turret: WagonTurret,
+        target: Monster,
+        monsters: list[Monster],
+        blasts: list[Blast],
+    ) -> float:
+        """Apply direct or splash damage from one turret shot."""
+        radius = self._aoe_radius(turret)
+        if radius is None:
+            damage = _apply_damage(target, turret.config.damage)
+            if turret.kind == "ICE":
+                self._apply_slow(turret, [target])
+            return damage
+
+        center = target.position
+        victims = [
+            monster
+            for monster in monsters
+            if monster.is_alive
+            and _distance(center, monster.position) <= radius + monster.radius
+        ]
+        damage = 0.0
+        for victim in victims:
+            damage += _apply_damage(victim, turret.config.damage)
+
+        if turret.kind == "ICE":
+            self._apply_slow(turret, victims)
+
+        blasts.append(
+            Blast(
+                position=center,
+                radius=radius,
+                kind=turret.kind,
+                damage=turret.config.damage,
+            )
+        )
+        return damage
+
+    def _apply_slow(self, turret: WagonTurret, victims: list[Monster]) -> None:
+        slow = (
+            turret.config.slow_percent
+            if turret.config.slow_percent is not None
+            else self.ice_slow_per_wagon
+        )
+        for victim in victims:
+            if victim.is_alive:
+                victim.apply_slow(
+                    slow,
+                    self.ice_slow_duration,
+                    max_percent=self.ice_slow_max,
+                )
+
+    def _aoe_radius(self, turret: WagonTurret) -> float | None:
+        radius = turret.config.aoe_radius
+        if radius is not None:
+            return radius
+        if turret.kind == "MORTAR":
+            return self.mortar_aoe_radius
+        return None
 
     def _turret_candidates(
         self,

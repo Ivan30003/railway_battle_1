@@ -59,7 +59,7 @@ class App:
 
         pygame.display.init()
         pygame.font.init()
-        pygame.display.set_caption("Паровоз — Milestone 4")
+        pygame.display.set_caption("Паровоз — Milestone 5")
         self._display_flags = pygame.DOUBLEBUF
         if config.window.resizable:
             self._display_flags |= pygame.RESIZABLE
@@ -172,7 +172,7 @@ def _non_negative_int(value: str) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m game",
-        description="Паровоз — milestone 4: locomotive cannon, turrets and reservations",
+        description="Паровоз — milestone 5: mortar AoE, ice slow and combat effects",
     )
     parser.add_argument(
         "--config",

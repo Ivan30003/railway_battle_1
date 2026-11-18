@@ -4,6 +4,9 @@ Monsters spawn beside the railway at ``spawn_margin`` pixels from the route,
 then chase the locomotive. They attack from ``monster_attack_range`` plus their
 own radius, while a moving train crushes anything inside ``train_crush_radius``
 plus the monster radius. Crushing rewards gold but briefly slows the train.
+
+Ice turrets stack ``slow_percent`` on a monster up to a cap and refresh its
+``slow_timer``; while the timer runs the monster moves at ``effective_speed``.
 """
 
 from __future__ import annotations
@@ -39,20 +42,57 @@ class Monster:
     attack_interval: float
     radius: float
     attack_timer: float = 0.0
+    slow_percent: float = 0.0
+    slow_timer: float = 0.0
 
     @property
     def is_alive(self) -> bool:
         return self.hp > 0.0
 
+    @property
+    def is_slowed(self) -> bool:
+        return self.slow_timer > 0.0 and self.slow_percent > 0.0
+
+    @property
+    def effective_speed(self) -> float:
+        if not self.is_slowed:
+            return self.speed
+        return self.speed * (1.0 - self.slow_percent)
+
     def distance_to(self, point: Point) -> float:
         return math.hypot(self.position[0] - point[0], self.position[1] - point[1])
+
+    def apply_slow(self, percent: float, duration: float, *, max_percent: float = 1.0) -> None:
+        """Add a slow effect, capping it at ``max_percent``.
+
+        Repeated hits stack their percentages and refresh the timer, so a
+        steady ice stream keeps a monster slowed for as long as it keeps
+        hitting.
+        """
+        percent = max(0.0, percent)
+        if percent <= 0.0 or duration <= 0.0:
+            return
+        cap = max(0.0, min(1.0, max_percent))
+        self.slow_percent = min(cap, self.slow_percent + percent)
+        if self.slow_percent > 0.0:
+            self.slow_timer = max(self.slow_timer, duration)
+
+    def tick_slow(self, dt: float) -> None:
+        """Advance the slow timer and clear the effect once it expires."""
+        if self.slow_timer <= 0.0:
+            self.slow_timer = 0.0
+            self.slow_percent = 0.0
+            return
+        self.slow_timer = max(0.0, self.slow_timer - dt)
+        if self.slow_timer == 0.0:
+            self.slow_percent = 0.0
 
     def move_toward(self, target: Point, dt: float) -> None:
         """Move towards ``target`` without overshooting it."""
         distance = self.distance_to(target)
         if distance <= 0.0 or dt <= 0.0:
             return
-        step = min(distance, self.speed * dt)
+        step = min(distance, self.effective_speed * dt)
         self.position = (
             self.position[0] + (target[0] - self.position[0]) / distance * step,
             self.position[1] + (target[1] - self.position[1]) / distance * step,
@@ -199,6 +239,7 @@ class MonsterSystem:
         target = train.locomotive_sample().position
         for monster in self.monsters:
             monster.attack_timer = max(0.0, monster.attack_timer - dt)
+            monster.tick_slow(dt)
             if monster.distance_to(target) > self.attack_range + monster.radius:
                 monster.move_toward(target, dt)
 
