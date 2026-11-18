@@ -1,4 +1,4 @@
-"""Victory screen placeholder."""
+"""Victory screen shown after the last map is cleared."""
 
 from __future__ import annotations
 

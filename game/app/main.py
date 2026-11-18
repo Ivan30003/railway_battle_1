@@ -14,6 +14,7 @@ from game.app.scene_manager import SceneManager
 from game.assets.loader import AssetLoader
 from game.core.config import ConfigError, GameConfig
 from game.core.errors import MapError
+from game.core.game_state import RunStats
 from game.core.map_loader import MapData, load_map
 from game.io.actions import Action
 from game.io.input import InputState
@@ -27,12 +28,25 @@ DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "game.json"
 _SCENE_CHOICES = ("menu", "game", "shop", "gameover", "victory")
 
 
-def _resolve_map_path(config: GameConfig, map_path: str | Path | None) -> Path:
+def _resolve_map_paths(
+    config: GameConfig,
+    map_path: str | Path | None,
+) -> tuple[Path, ...]:
+    """Return the maps of a run.
+
+    Without ``--map`` the whole ``maps`` list from the config becomes a run.
+    An explicit ``--map`` loads that single map, so it can be used to preview
+    or test one map without touching the campaign.
+    """
     if map_path is not None:
         path = Path(map_path).expanduser()
-        return path if path.is_absolute() else Path.cwd() / path
-    spec = Path(config.maps[0]).expanduser()
-    return spec if spec.is_absolute() else PROJECT_ROOT / spec
+        return (path if path.is_absolute() else Path.cwd() / path,)
+
+    paths: list[Path] = []
+    for spec in config.maps:
+        path = Path(spec).expanduser()
+        paths.append(path if path.is_absolute() else PROJECT_ROOT / path)
+    return tuple(paths)
 
 
 class App:
@@ -52,14 +66,17 @@ class App:
         self.fps = 0.0
         self.frame_ms = 0.0
 
-        self.map_data: MapData = load_map(
-            _resolve_map_path(config, map_path),
-            tile_size=config.tile_size,
+        self.map_data: MapData
+        self.map_paths = _resolve_map_paths(config, map_path)
+        self.levels: tuple[MapData, ...] = tuple(
+            load_map(path, tile_size=config.tile_size) for path in self.map_paths
         )
+        self.map_data = self.levels[0]
+        self.run_stats: RunStats | None = None
 
         pygame.display.init()
         pygame.font.init()
-        pygame.display.set_caption("Паровоз — Milestone 6")
+        pygame.display.set_caption("Паровоз — Milestone 7")
         self._display_flags = pygame.DOUBLEBUF
         if config.window.resizable:
             self._display_flags |= pygame.RESIZABLE
@@ -80,6 +97,19 @@ class App:
         self.scene_manager.set_initial(initial_scene)
         self.timer = FixedTimestep()
         self.clock = pygame.time.Clock()
+
+    @property
+    def map_count(self) -> int:
+        """Number of maps in the current run."""
+        return len(self.levels)
+
+    def set_map(self, index: int) -> MapData:
+        """Make the map at ``index`` current and resize the virtual canvas."""
+        if not 0 <= index < len(self.levels):
+            raise IndexError(f"Map index out of range: {index}")
+        self.map_data = self.levels[index]
+        self.renderer.set_virtual_size(self.map_data.pixel_size)
+        return self.map_data
 
     def _create_window(self, size: tuple[int, int]) -> pygame.Surface:
         kwargs = {"vsync": 1} if self._use_vsync else {}
@@ -172,7 +202,7 @@ def _non_negative_int(value: str) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m game",
-        description="Паровоз — milestone 6: gold economy and the wagon shop",
+        description="Паровоз — milestone 7: map rotation, victory and defeat",
     )
     parser.add_argument(
         "--config",
@@ -184,7 +214,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--map",
         type=Path,
         default=None,
-        help="map file to load (default: the first entry in config.maps)",
+        help="run a single map instead of the campaign from config.maps",
     )
     parser.add_argument(
         "--scene",

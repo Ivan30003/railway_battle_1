@@ -1,4 +1,4 @@
-"""Shared placeholder end screen for victory and defeat."""
+"""Shared victory / defeat screen with the run summary."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from abc import abstractmethod
 import pygame
 
 from game.app.scene import Scene
+from game.core.game_state import RunStats
 from game.io.actions import Action
 from game.io.input import InputState
 from game.view.renderer import Renderer
@@ -20,14 +21,14 @@ class EndScene(Scene):
 
     def __init__(self, app) -> None:
         super().__init__(app)
-        self._restart = Button(pygame.Rect(0, 0, 220, 44), "Заново", font_size=20)
-        self._menu = Button(pygame.Rect(0, 0, 220, 44), "В меню", font_size=20)
+        self._restart = Button(pygame.Rect(0, 0, 220, 40), "Заново", font_size=19)
+        self._menu = Button(pygame.Rect(0, 0, 220, 40), "В меню", font_size=19)
         self._layout()
 
     def _layout(self) -> None:
         width, height = self.app.renderer.virtual_size
-        self._restart.rect = pygame.Rect((width - 220) // 2, height // 2 + 30, 220, 44)
-        self._menu.rect = pygame.Rect((width - 220) // 2, height // 2 + 88, 220, 44)
+        self._restart.rect = pygame.Rect((width - 220) // 2, height // 2 + 58, 220, 40)
+        self._menu.rect = pygame.Rect((width - 220) // 2, height // 2 + 106, 220, 40)
 
     @abstractmethod
     def render(self, renderer: Renderer) -> None:
@@ -63,7 +64,7 @@ class EndScene(Scene):
             self.title,
             44,
             accent,
-            (width // 2, height // 2 - 120),
+            (width // 2, height // 2 - 110),
             anchor="center",
             bold=True,
         )
@@ -71,16 +72,10 @@ class EndScene(Scene):
             self.subtitle,
             14,
             theme.text_muted,
-            (width // 2, height // 2 - 78),
+            (width // 2, height // 2 - 76),
             anchor="center",
         )
-        renderer.draw_text(
-            "Здесь будет итоговая статистика забега",
-            12,
-            theme.text_muted,
-            (width // 2, height // 2 - 30),
-            anchor="center",
-        )
+        self._draw_stats(renderer)
 
         mouse = self.app.input.mouse_virtual
         self._restart.draw(renderer, theme, mouse)
@@ -93,3 +88,48 @@ class EndScene(Scene):
             (width // 2, height - 36),
             anchor="center",
         )
+
+    def _draw_stats(self, renderer: Renderer) -> None:
+        width, height = renderer.virtual_size
+        theme = renderer.theme
+        stats = getattr(self.app, "run_stats", None)
+        if not isinstance(stats, RunStats):
+            renderer.draw_text(
+                "Статистика появится после забега",
+                12,
+                theme.text_muted,
+                (width // 2, height // 2 - 34),
+                anchor="center",
+            )
+            return
+
+        rows = (
+            (
+                ("Карты", f"{stats.maps_cleared}/{self.app.map_count}"),
+                ("Круги", str(stats.rounds_cleared)),
+                ("Монстры", str(stats.monsters_defeated)),
+            ),
+            (
+                ("Золото заработано", str(stats.gold_earned)),
+                ("Вагоны куплены", str(stats.wagons_bought)),
+                ("Золото осталось", str(stats.gold_left)),
+            ),
+        )
+
+        column_width = 150
+        left = width // 2 - column_width - 20
+        top = height // 2 - 46
+        row_height = 22
+        for column, entries in enumerate(rows):
+            x = left + column * (column_width + 20)
+            for row, (label, value) in enumerate(entries):
+                y = top + row * row_height
+                renderer.draw_text(label, 11, theme.text_muted, (x, y))
+                renderer.draw_text(
+                    value,
+                    12,
+                    theme.text,
+                    (x + column_width, y),
+                    anchor="topright",
+                    bold=True,
+                )

@@ -1,4 +1,4 @@
-"""Defeat screen placeholder."""
+"""Defeat screen shown when the locomotive is destroyed."""
 
 from __future__ import annotations
 

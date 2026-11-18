@@ -10,7 +10,7 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 import pygame
 import pytest
 
-from game.app.main import DEFAULT_CONFIG_PATH, App
+from game.app.main import DEFAULT_CONFIG_PATH, PROJECT_ROOT, App
 from game.core.config import GameConfig
 from game.core.game_state import GamePhase
 from game.core.monsters import FAST_KIND, Monster
@@ -265,6 +265,201 @@ def test_shop_buttons_buy_with_the_mouse_and_respect_gold() -> None:
         assert game.state.total_purchased == 1
         assert game.state.gold == 0
         game.render(app.renderer)
+    finally:
+        pygame.quit()
+
+
+def test_map_finishes_only_after_rounds_per_map() -> None:
+    config = dataclasses.replace(
+        GameConfig.load(DEFAULT_CONFIG_PATH),
+        rounds_per_map=2,
+    )
+    app = App(config, initial_scene="game")
+    try:
+        game = app.scene_manager.current
+        game.combat.cannon.range = -1.0
+        game.combat.turrets.clear()
+        route = game.map_data.route
+
+        game.train.travelled = route.total_length - 1.0
+        game.update(1.0, app.input)
+
+        assert game.state.rounds_on_map == 1
+        assert game.state.map_index == 0
+
+        game.train.travelled = route.total_length * 2 - 1.0
+        game.update(1.0, app.input)
+
+        assert game.state.rounds_on_map == 0
+        assert game.state.map_index == 1
+        assert game.state.stats.rounds_cleared == 2
+        assert game.state.stats.maps_cleared == 1
+        assert game.map_data.source_path.name == "map2.txt"
+    finally:
+        pygame.quit()
+
+
+def test_map_switch_keeps_gold_hp_and_wagons() -> None:
+    config = dataclasses.replace(
+        GameConfig.load(DEFAULT_CONFIG_PATH),
+        rounds_per_map=1,
+        start_gold=50,
+    )
+    app = App(config, initial_scene="game")
+    try:
+        game = app.scene_manager.current
+        game.combat.cannon.range = -1.0
+        game.combat.turrets.clear()
+        game.state.gold = 77
+        game.state.locomotive_hp = 42.0
+        game.state.stats.gold_earned = 21
+        game.state.stats.crushed = 3
+        game.train.add_wagon("MORTAR")
+        game.combat.add_wagon("MORTAR")
+        first_map = game.map_data
+        assert first_map.source_path.name == "map1.txt"
+        assert app.map_count == 2
+
+        game.train.travelled = first_map.route.total_length - 1.0
+        game.update(1.0, app.input)
+
+        assert game.state.phase == GamePhase.PLAYING
+        assert game.state.map_index == 1
+        assert game.state.rounds_on_map == 0
+        assert game.state.stats.maps_cleared == 1
+        assert game.state.stats.rounds_cleared == 1
+        assert game.map_data.source_path.name == "map2.txt"
+        assert app.map_data is game.map_data
+        assert app.map_paths[1].name == "map2.txt"
+        assert app.renderer.virtual_size == game.map_data.pixel_size
+        assert game.state.gold == 77
+        assert game.state.locomotive_hp == pytest.approx(42.0)
+        assert game.state.stats.gold_earned == 21
+        expected_wagons = list(config.start_wagons) + ["MORTAR"]
+        assert game.train.wagons == expected_wagons
+        assert [turret.kind for turret in game.combat.turrets] == expected_wagons
+        assert game.train.travelled == 0.0
+        assert game.monsters.monsters == []
+        assert game._map_banner > 0.0
+        game.render(app.renderer)
+    finally:
+        pygame.quit()
+
+
+def test_clearing_the_last_map_wins_and_restart_resets_the_run() -> None:
+    config = dataclasses.replace(
+        GameConfig.load(DEFAULT_CONFIG_PATH),
+        rounds_per_map=1,
+        start_gold=12,
+    )
+    app = App(config, initial_scene="game")
+    try:
+        game = app.scene_manager.current
+        game.combat.cannon.range = -1.0
+        game.combat.turrets.clear()
+        game.state.gold = 34
+        game.state.stats.gold_earned = 22
+
+        game.train.travelled = game.map_data.route.total_length - 1.0
+        game.update(1.0, app.input)
+        assert game.state.map_index == 1
+        assert app.scene_manager.current is game
+
+        # Newly built turrets must not change the outcome of this check.
+        game.combat.cannon.range = -1.0
+        game.combat.turrets.clear()
+        game.train.travelled = game.map_data.route.total_length - 1.0
+        game.update(1.0, app.input)
+
+        assert game.state.phase == GamePhase.VICTORY
+        stats = app.run_stats
+        assert stats is game.state.stats
+        assert stats.won is True
+        assert stats.maps_cleared == 2
+        assert stats.rounds_cleared == 2
+        assert stats.gold_left == 34
+
+        app.scene_manager.apply_pending()
+        end = app.scene_manager.current
+        assert end.display_name == "Victory"
+        assert end.title == "ПОБЕДА"
+        end.render(app.renderer)
+
+        _press(app, pygame.K_RETURN)
+
+        restarted = app.scene_manager.current
+        assert restarted.display_name == "Game"
+        assert restarted.state.map_index == 0
+        assert restarted.state.rounds_on_map == 0
+        assert restarted.state.stats.maps_cleared == 0
+        assert app.map_data.source_path.name == "map1.txt"
+        assert restarted.state.gold == config.start_gold
+        assert restarted.state.locomotive_hp == pytest.approx(config.locomotive_hp)
+        assert restarted.train.wagons == list(config.start_wagons)
+    finally:
+        pygame.quit()
+
+
+def test_defeat_records_the_run_summary() -> None:
+    config = GameConfig.load(DEFAULT_CONFIG_PATH)
+    app = App(config, initial_scene="game")
+    try:
+        game = app.scene_manager.current
+        game.combat.cannon.range = -1.0
+        game.combat.turrets.clear()
+        game.state.locomotive_hp = 5.0
+        game.state.gold = 13
+        game.state.stats.kills = 2
+        game.state.stats.crushed = 1
+        game.state.stats.gold_earned = 9
+        game.state.stats.wagons_bought = 1
+        locomotive = game.train.locomotive_sample()
+        ahead = (
+            locomotive.position[0] + locomotive.direction[0] * 34.0,
+            locomotive.position[1] + locomotive.direction[1] * 34.0,
+        )
+        game.monsters.monsters = [_fast_monster(ahead)]
+
+        game.update(0.01, app.input)
+
+        assert game.state.locomotive_hp == 0.0
+        assert game.state.phase == GamePhase.GAME_OVER
+        stats = app.run_stats
+        assert stats is game.state.stats
+        assert stats.won is False
+        assert stats.monsters_defeated == 3
+        assert stats.gold_left == 13
+
+        app.scene_manager.apply_pending()
+        end = app.scene_manager.current
+        assert end.display_name == "GameOver"
+        assert end.title == "ПОРАЖЕНИЕ"
+        end.render(app.renderer)
+    finally:
+        pygame.quit()
+
+
+def test_explicit_map_runs_a_single_map_campaign() -> None:
+    config = dataclasses.replace(
+        GameConfig.load(DEFAULT_CONFIG_PATH),
+        rounds_per_map=1,
+    )
+    map_path = PROJECT_ROOT / "maps" / "map2.txt"
+    app = App(config, initial_scene="game", map_path=map_path)
+    try:
+        game = app.scene_manager.current
+        assert app.map_count == 1
+        assert app.map_paths == (map_path,)
+        assert game.map_data.source_path == map_path
+        assert game.state.map_index == 0
+
+        game.combat.cannon.range = -1.0
+        game.combat.turrets.clear()
+        game.train.travelled = game.map_data.route.total_length - 1.0
+        game.update(1.0, app.input)
+
+        assert game.state.phase == GamePhase.VICTORY
+        assert app.run_stats.maps_cleared == 1
     finally:
         pygame.quit()
 

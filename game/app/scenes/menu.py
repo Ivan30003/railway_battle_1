@@ -1,4 +1,4 @@
-"""Main menu placeholder."""
+"""Main menu."""
 
 from __future__ import annotations
 
@@ -56,14 +56,14 @@ class MenuScene(Scene):
             bold=True,
         )
         renderer.draw_text(
-            "MILESTONE 6 — GOLD & WAGON SHOP",
+            "MILESTONE 7 — MAP ROTATION & VICTORY",
             13,
             theme.text_muted,
             (width // 2, height // 2 - 108),
             anchor="center",
         )
         renderer.draw_text(
-            "Выживи как можно больше кругов",
+            "Пройди все карты, не потеряв паровоз",
             16,
             theme.text,
             (width // 2, height // 2 - 70),

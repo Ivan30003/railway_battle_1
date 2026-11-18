@@ -32,6 +32,11 @@ class DebugOverlay:
         config_path = app.config.source_path.name if app.config.source_path else "-"
         map_data = app.map_data
         map_name = map_data.source_path.name if map_data.source_path else "-"
+        map_index = getattr(getattr(scene, "state", None), "map_index", None)
+        if isinstance(map_index, int):
+            map_label = f"{map_index + 1}/{app.map_count} {map_name}"
+        else:
+            map_label = map_name
         train = getattr(scene, "train", None)
         if train is None:
             train_line = "train -"
@@ -70,7 +75,7 @@ class DebugOverlay:
             f"scale {renderer.letterbox.scale:.3f}",
             f"mouse window ({mouse_window[0]}, {mouse_window[1]})   "
             f"virtual ({mouse_virtual[0]:.1f}, {mouse_virtual[1]:.1f})",
-            f"map {map_name}   {map_data.width}x{map_data.height} tiles   "
+            f"map {map_label}   {map_data.width}x{map_data.height} tiles   "
             f"route {len(map_data.route_tiles)} tiles / {map_data.route_length:.0f} px",
             train_line,
             monster_line,

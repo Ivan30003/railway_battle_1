@@ -1,14 +1,15 @@
-"""Game scene: track, train, monsters, combat, economy and lap counter.
+"""Game scene: track, train, monsters, combat, economy and map rotation.
 
-Milestone 6 adds the wagon shop: gold earned from kills and crushing buys new
-wagons whose price grows with every purchase. A bought wagon is attached to the
-back of the train and immediately gets its turret. The shop pauses the
-simulation, so purchases never happen mid-explosion.
+Milestone 7 turns the game into a run over several maps. A map is completed
+after ``rounds_per_map`` laps; the train keeps its wagons, gold and remaining
+HP while the route, monsters and turrets are rebuilt on the next map. Clearing
+the last map leads to victory, losing all locomotive HP leads to defeat.
 """
 
 from __future__ import annotations
 
 import random
+from collections.abc import Sequence
 
 import pygame
 
@@ -53,43 +54,25 @@ class GameScene(Scene):
             gold=app.config.start_gold,
             locomotive_hp=float(app.config.locomotive_hp),
         )
+        self.app.run_stats = self.state.stats
         self.shop = Shop(
             app.config.wagon_configs,
             base_cost=app.config.wagon_base_cost,
             cost_step=app.config.wagon_cost_step,
         )
-        self.map_data = app.map_data
         self.track_layer = TrackLayer(app.theme)
         self.train_layer = TrainLayer(app.theme)
         self.monster_layer = MonsterLayer(app.theme)
         self.turret_layer = TurretLayer(app.theme)
-        self.train = Train(
-            route=self.map_data.route,
-            speed=app.config.train_speed,
-            wagon_spacing=app.config.wagon_spacing,
-            wagons=list(app.config.start_wagons),
-        )
-        self.monsters = MonsterSystem(
-            self.map_data.route,
-            app.config.spawn,
-            app.config.monster_configs,
-            attack_range=app.config.monster_attack_range,
-            crush_radius=app.config.train_crush_radius,
-            hit_radius=app.config.monster_hit_radius,
-            rng=random.Random(app.seed),
-        )
-        self.combat = CombatSystem(
-            app.config.cannon,
-            app.config.wagon_configs,
-            list(app.config.start_wagons),
-            ice_slow_per_wagon=app.config.ice_slow_per_wagon,
-            ice_slow_max=app.config.ice_slow_max,
-            ice_slow_duration=app.config.ice_slow_duration,
-            mortar_aoe_radius=app.config.mortar_aoe_radius,
-        )
+
+        # A new run always starts from the first map of the current campaign.
+        self.map_data = app.set_map(0)
+        self._create_systems(list(app.config.start_wagons))
+
         self._lap_flash = 0.0
         self._damage_flash = 0.0
         self._crush_slow = 0.0
+        self._map_banner = 2.4
         self._shop_message = "1–4 или ЛКМ — купить"
         self._shop_message_ok: bool | None = None
         if start_in_shop:
@@ -104,6 +87,73 @@ class GameScene(Scene):
         self._pause_menu = Button(pygame.Rect(0, 0, 1, 1), "В меню", font_size=18)
         self._layout()
         self._refresh_shop_buttons()
+
+    # ------------------------------------------------------------------
+    # Run and level lifecycle
+    # ------------------------------------------------------------------
+    def _create_systems(self, wagons: Sequence[str]) -> None:
+        """Build train, monsters and combat for the current map."""
+        self.train = Train(
+            route=self.map_data.route,
+            speed=self.app.config.train_speed,
+            wagon_spacing=self.app.config.wagon_spacing,
+            wagons=list(wagons),
+        )
+        self.monsters = MonsterSystem(
+            self.map_data.route,
+            self.app.config.spawn,
+            self.app.config.monster_configs,
+            attack_range=self.app.config.monster_attack_range,
+            crush_radius=self.app.config.train_crush_radius,
+            hit_radius=self.app.config.monster_hit_radius,
+            rng=random.Random(self.app.seed + self.state.map_index),
+        )
+        self.combat = CombatSystem(
+            self.app.config.cannon,
+            self.app.config.wagon_configs,
+            list(wagons),
+            ice_slow_per_wagon=self.app.config.ice_slow_per_wagon,
+            ice_slow_max=self.app.config.ice_slow_max,
+            ice_slow_duration=self.app.config.ice_slow_duration,
+            mortar_aoe_radius=self.app.config.mortar_aoe_radius,
+        )
+
+    def _load_level(self) -> None:
+        """Switch to the current map while keeping the run-wide state."""
+        wagons = list(self.train.wagons)
+        self.map_data = self.app.set_map(self.state.map_index)
+        self.camera = Camera()
+        self.turret_layer = TurretLayer(self.app.theme)
+        self._create_systems(wagons)
+        self._lap_flash = 0.0
+        self._damage_flash = 0.0
+        self._crush_slow = 0.0
+        self._map_banner = 2.4
+        self._layout()
+        self._refresh_shop_buttons()
+
+    def _complete_map(self) -> None:
+        """Finish the current map and move on, or win after the last one."""
+        self.state.stats.maps_cleared += 1
+        if self.state.map_index + 1 >= self.app.map_count:
+            self._finish_run(victory=True)
+            return
+        self.state.map_index += 1
+        self.state.rounds_on_map = 0
+        self._load_level()
+
+    def _finish_run(self, *, victory: bool) -> None:
+        """Freeze the run summary and request the matching end scene."""
+        stats = self.state.stats
+        stats.gold_left = self.state.gold
+        stats.won = victory
+        if victory:
+            stats.maps_cleared = self.app.map_count
+            self.state.phase = GamePhase.VICTORY
+        else:
+            self.state.phase = GamePhase.GAME_OVER
+        self.app.run_stats = stats
+        self.app.scene_manager.request_scene("victory" if victory else "gameover")
 
     # ------------------------------------------------------------------
     # Layout
@@ -212,9 +262,13 @@ class GameScene(Scene):
                 self.app.scene_manager.request_scene("menu")
 
     def update(self, dt: float, input_state: InputState) -> None:
+        if dt > 0.0 and self._map_banner > 0.0:
+            self._map_banner = max(0.0, self._map_banner - dt)
+
         if self.state.phase != GamePhase.PLAYING or dt <= 0.0:
             return
 
+        stats = self.state.stats
         self._damage_flash = max(0.0, self._damage_flash - dt)
         speed_scale = 1.0
         if self._crush_slow > 0.0:
@@ -222,9 +276,12 @@ class GameScene(Scene):
             self._crush_slow = max(0.0, self._crush_slow - dt)
         train_moving = speed_scale > 0.0
         laps = self.train.update(dt * speed_scale)
+        map_finished = False
         if laps:
             self.state.rounds_on_map += laps
+            stats.rounds_cleared += laps
             self._lap_flash = 0.8
+            map_finished = self.state.rounds_on_map >= self.app.config.rounds_per_map
         if laps == 0 and self._lap_flash > 0.0:
             self._lap_flash = max(0.0, self._lap_flash - dt)
 
@@ -232,8 +289,10 @@ class GameScene(Scene):
         if result.crushed:
             seconds = self.app.config.train_stop_per_crush_ms / 1000.0
             self._crush_slow += result.crushed * seconds
+            stats.crushed += result.crushed
         if result.gold:
             self.state.gold += result.gold
+            stats.gold_earned += result.gold
         if result.damage:
             self.state.locomotive_hp = max(0.0, self.state.locomotive_hp - result.damage)
             self._damage_flash = 0.45
@@ -250,10 +309,15 @@ class GameScene(Scene):
         self.turret_layer.update(dt)
         if combat.gold:
             self.state.gold += combat.gold
+            stats.gold_earned += combat.gold
+        if combat.kills:
+            stats.kills += combat.kills
 
         if self.state.locomotive_hp <= 0.0:
-            self.state.phase = GamePhase.GAME_OVER
-            self.app.scene_manager.request_scene("gameover")
+            self._finish_run(victory=False)
+            return
+        if map_finished:
+            self._complete_map()
 
     # ------------------------------------------------------------------
     # Rendering
@@ -274,6 +338,7 @@ class GameScene(Scene):
 
         self.state.gold = purchase.gold_after
         self.state.total_purchased = purchase.purchased_after
+        self.state.stats.wagons_bought += 1
         self.train.add_wagon(wagon_type)
         self.combat.add_wagon(wagon_type)
         self._shop_message = (
@@ -323,7 +388,7 @@ class GameScene(Scene):
             (110, y),
         )
         renderer.draw_text(
-            f"КАРТА  {self.state.map_index + 1}/{len(self.app.config.maps)}",
+            f"КАРТА  {self.state.map_index + 1}/{self.app.map_count}",
             font_size,
             theme.text,
             (208, y),
@@ -423,6 +488,17 @@ class GameScene(Scene):
         self._draw_hud(renderer)
 
         width, height = renderer.virtual_size
+        if self._map_banner > 0.0 and self.state.phase == GamePhase.PLAYING:
+            fade = min(1.0, self._map_banner / 0.6)
+            color = renderer.theme.accent if fade >= 1.0 else renderer.theme.text_muted
+            renderer.draw_text(
+                f"КАРТА {self.state.map_index + 1}/{self.app.map_count}",
+                30,
+                color,
+                (width // 2, height // 2 - 10),
+                anchor="center",
+                bold=True,
+            )
         if self._damage_flash > 0.0:
             renderer.draw_rect(renderer.theme.danger, (0, 0, width, height), width=4)
         if self._crush_slow > 0.0:
