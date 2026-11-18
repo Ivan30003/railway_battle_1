@@ -169,15 +169,22 @@ class CombatSystem:
         self.ice_slow_max = ice_slow_max
         self.ice_slow_duration = ice_slow_duration
         self.mortar_aoe_radius = mortar_aoe_radius
+        self.wagon_configs = dict(wagon_configs)
         self.turrets: list[WagonTurret] = []
-        for index, kind in enumerate(wagon_kinds):
-            config = wagon_configs.get(kind)
-            if config is None:
-                raise ValueError(f"Unknown wagon type: {kind}")
-            self.turrets.append(WagonTurret(index=index, kind=kind, config=config))
+        for kind in wagon_kinds:
+            self.add_wagon(kind)
         self.reservations = ReservationBook()
         self.kills_total = 0
         self.damage_total = 0.0
+
+    def add_wagon(self, kind: str) -> WagonTurret:
+        """Create a turret for a newly purchased wagon."""
+        config = self.wagon_configs.get(kind)
+        if config is None:
+            raise ValueError(f"Unknown wagon type: {kind}")
+        turret = WagonTurret(index=len(self.turrets), kind=kind, config=config)
+        self.turrets.append(turret)
+        return turret
 
     def update(
         self,

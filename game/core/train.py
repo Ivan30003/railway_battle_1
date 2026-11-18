@@ -79,6 +79,12 @@ class Train:
             cars.append(TrainCar(kind, self.route.sample(self.travelled - offset), offset))
         return cars
 
+    def add_wagon(self, kind: str) -> None:
+        """Attach a new wagon to the back of the train."""
+        if not isinstance(kind, str) or not kind:
+            raise ValueError("Wagon kinds must be non-empty strings")
+        self.wagons.append(kind)
+
     def advance(self, distance: float) -> int:
         """Move forward and return how many full laps were completed."""
         if distance <= 0.0:

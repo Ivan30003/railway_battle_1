@@ -26,6 +26,16 @@ def _press(app: App, key: int) -> None:
     app.scene_manager.apply_pending()
 
 
+def _click(app: App, position: tuple[float, float]) -> None:
+    app.input.begin_frame()
+    app.input.process_event(
+        pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=(0, 0))
+    )
+    app.input.mouse_virtual = position
+    app.scene_manager.handle_actions(app.input)
+    app.scene_manager.apply_pending()
+
+
 def test_scene_navigation_and_shop_pause() -> None:
     config = GameConfig.load(DEFAULT_CONFIG_PATH)
     app = App(config, initial_scene="menu")
@@ -197,6 +207,63 @@ def test_ice_turret_slows_monsters_and_spawns_a_blast() -> None:
         assert target.slow_percent == pytest.approx(0.2)
         assert target.slow_timer == pytest.approx(config.ice_slow_duration)
         assert [blast.kind for blast in game.turret_layer.blasts] == ["ICE"]
+        game.render(app.renderer)
+    finally:
+        pygame.quit()
+
+
+def test_shop_purchases_a_wagon_with_the_keyboard() -> None:
+    config = dataclasses.replace(
+        GameConfig.load(DEFAULT_CONFIG_PATH),
+        start_gold=100,
+    )
+    app = App(config, initial_scene="shop")
+    try:
+        game = app.scene_manager.current
+        assert game.state.phase == GamePhase.SHOP
+        assert game.state.gold == 100
+        assert game._price() == config.wagon_base_cost
+        before = game.train.wagon_count
+
+        _press(app, pygame.K_3)
+
+        assert game.train.wagons[-1] == "MORTAR"
+        assert game.combat.turrets[-1].kind == "MORTAR"
+        assert game.combat.turrets[-1].index == before
+        assert game.state.total_purchased == 1
+        assert game.state.gold == 100 - config.wagon_base_cost
+        assert game._price() == config.wagon_base_cost + config.wagon_cost_step
+        assert game._shop_message_ok is True
+        game.render(app.renderer)
+    finally:
+        pygame.quit()
+
+
+def test_shop_buttons_buy_with_the_mouse_and_respect_gold() -> None:
+    config = GameConfig.load(DEFAULT_CONFIG_PATH)
+    app = App(config, initial_scene="shop")
+    try:
+        game = app.scene_manager.current
+        game.state.gold = 0
+        game._refresh_shop_buttons()
+        wagon_count = game.train.wagon_count
+
+        _press(app, pygame.K_1)
+        assert game.train.wagon_count == wagon_count
+        assert game.state.total_purchased == 0
+        assert game._shop_message_ok is False
+
+        _click(app, game._shop_buttons[0].rect.center)
+        assert game.train.wagon_count == wagon_count
+
+        game.state.gold = game._price()
+        game._refresh_shop_buttons()
+        _click(app, game._shop_buttons[1].rect.center)
+
+        assert game.train.wagons[-1] == "ICE"
+        assert game.combat.turrets[-1].kind == "ICE"
+        assert game.state.total_purchased == 1
+        assert game.state.gold == 0
         game.render(app.renderer)
     finally:
         pygame.quit()

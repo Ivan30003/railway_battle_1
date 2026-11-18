@@ -1,9 +1,9 @@
-"""Game scene: track, train, monsters, combat and lap counter.
+"""Game scene: track, train, monsters, combat, economy and lap counter.
 
-Milestone 5 adds area-of-effect weapons: mortar shells damage every monster
-around the impact point and ice turrets splash damage plus a stacking slow. The
-player still aims the locomotive cannon with the mouse and wagon turrets acquire
-and reserve targets on their own.
+Milestone 6 adds the wagon shop: gold earned from kills and crushing buys new
+wagons whose price grows with every purchase. A bought wagon is attached to the
+back of the train and immediately gets its turret. The shop pauses the
+simulation, so purchases never happen mid-explosion.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from game.app.scene import Scene
 from game.core.combat import CombatSystem
 from game.core.game_state import GamePhase, GameState
 from game.core.monsters import MonsterSystem
+from game.core.shop import Shop
 from game.core.train import Train
 from game.io.actions import Action
 from game.io.input import InputState
@@ -34,6 +35,12 @@ _WAGON_LABELS = {
     "SNIPER": "Снайперский",
 }
 _WAGON_ORDER = ("MACHINEGUN", "ICE", "MORTAR", "SNIPER")
+_BUY_ACTIONS = {
+    "MACHINEGUN": Action.BUY_MACHINEGUN,
+    "ICE": Action.BUY_ICE,
+    "MORTAR": Action.BUY_MORTAR,
+    "SNIPER": Action.BUY_SNIPER,
+}
 
 
 class GameScene(Scene):
@@ -42,7 +49,15 @@ class GameScene(Scene):
     def __init__(self, app, start_in_shop: bool = False) -> None:
         super().__init__(app)
         self.camera = Camera()
-        self.state = GameState(locomotive_hp=float(app.config.locomotive_hp))
+        self.state = GameState(
+            gold=app.config.start_gold,
+            locomotive_hp=float(app.config.locomotive_hp),
+        )
+        self.shop = Shop(
+            app.config.wagon_configs,
+            base_cost=app.config.wagon_base_cost,
+            cost_step=app.config.wagon_cost_step,
+        )
         self.map_data = app.map_data
         self.track_layer = TrackLayer(app.theme)
         self.train_layer = TrainLayer(app.theme)
@@ -75,6 +90,8 @@ class GameScene(Scene):
         self._lap_flash = 0.0
         self._damage_flash = 0.0
         self._crush_slow = 0.0
+        self._shop_message = "1–4 или ЛКМ — купить"
+        self._shop_message_ok: bool | None = None
         if start_in_shop:
             self.state.phase = GamePhase.SHOP
 
@@ -86,6 +103,7 @@ class GameScene(Scene):
         self._pause_resume = Button(pygame.Rect(0, 0, 1, 1), "Продолжить", font_size=18)
         self._pause_menu = Button(pygame.Rect(0, 0, 1, 1), "В меню", font_size=18)
         self._layout()
+        self._refresh_shop_buttons()
 
     # ------------------------------------------------------------------
     # Layout
@@ -118,7 +136,7 @@ class GameScene(Scene):
             self._shop_buttons.append(
                 Button(
                     rect,
-                    _WAGON_LABELS[wagon_type],
+                    f"{index + 1}. {_WAGON_LABELS[wagon_type]}",
                     subtitle="30 золота",
                     enabled=False,
                     font_size=16,
@@ -153,6 +171,7 @@ class GameScene(Scene):
         if input_state.was_action(Action.TOGGLE_SHOP):
             if self.state.phase == GamePhase.PLAYING:
                 self.state.phase = GamePhase.SHOP
+                self._refresh_shop_buttons()
             elif self.state.phase == GamePhase.SHOP:
                 self.state.phase = GamePhase.PLAYING
 
@@ -172,6 +191,16 @@ class GameScene(Scene):
             self.state.phase = (
                 GamePhase.PLAYING if self.state.phase == GamePhase.SHOP else GamePhase.SHOP
             )
+            if self.state.phase == GamePhase.SHOP:
+                self._refresh_shop_buttons()
+
+        if self.state.phase == GamePhase.SHOP:
+            for index, wagon_type in enumerate(_WAGON_ORDER):
+                keyboard = input_state.was_action(_BUY_ACTIONS[wagon_type])
+                clicked = self._shop_buttons[index].clicked(input_state)
+                if keyboard or clicked:
+                    self._purchase(wagon_type)
+                    break
 
         if self.state.phase == GamePhase.SHOP and self._shop_close.clicked(input_state):
             self.state.phase = GamePhase.PLAYING
@@ -230,15 +259,36 @@ class GameScene(Scene):
     # Rendering
     # ------------------------------------------------------------------
     def _price(self) -> int:
-        return self.app.config.wagon_base_cost + self.app.config.wagon_cost_step * (
-            self.state.total_purchased
+        return self.shop.price(self.state.total_purchased)
+
+    def _purchase(self, wagon_type: str) -> bool:
+        purchase = self.shop.buy(
+            wagon_type,
+            self.state.gold,
+            self.state.total_purchased,
         )
+        if purchase is None:
+            self._shop_message = "Недостаточно золота"
+            self._shop_message_ok = False
+            return False
+
+        self.state.gold = purchase.gold_after
+        self.state.total_purchased = purchase.purchased_after
+        self.train.add_wagon(wagon_type)
+        self.combat.add_wagon(wagon_type)
+        self._shop_message = (
+            f"Куплен вагон: {_WAGON_LABELS[wagon_type]} за {purchase.price} золота"
+        )
+        self._shop_message_ok = True
+        self._refresh_shop_buttons()
+        return True
 
     def _refresh_shop_buttons(self) -> None:
         price = self._price()
+        affordable = self.state.gold >= price
         for button in self._shop_buttons:
             button.subtitle = f"{price} золота"
-            button.enabled = self.state.gold >= price
+            button.enabled = affordable
 
     def _draw_world(self, renderer: Renderer) -> None:
         self.track_layer.draw(
@@ -330,10 +380,16 @@ class GameScene(Scene):
             button.draw(renderer, theme, mouse)
 
         self._shop_close.draw(renderer, theme, mouse)
+        if self._shop_message_ok is None:
+            message_color = theme.text_muted
+        elif self._shop_message_ok:
+            message_color = theme.success
+        else:
+            message_color = theme.danger
         renderer.draw_text(
-            "Покупки станут доступны в milestone 6",
+            self._shop_message,
             10,
-            theme.text_muted,
+            message_color,
             (panel.centerx, panel.top + panel.height - 64),
             anchor="center",
         )

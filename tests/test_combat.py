@@ -315,6 +315,28 @@ def test_turret_without_priority_targets_the_nearest_monster() -> None:
     assert far.hp == pytest.approx(100.0)
 
 
+def test_add_wagon_creates_the_next_turret() -> None:
+    configs = {
+        "MACHINEGUN": _wagon(),
+        "ICE": _wagon(reserve="none"),
+    }
+    system = _combat(["MACHINEGUN"], configs)
+
+    turret = system.add_wagon("ICE")
+
+    assert turret.index == 1
+    assert turret.kind == "ICE"
+    assert turret.config is configs["ICE"]
+    assert [item.kind for item in system.turrets] == ["MACHINEGUN", "ICE"]
+
+
+def test_add_wagon_rejects_unknown_kinds() -> None:
+    system = _combat(["MACHINEGUN"], {"MACHINEGUN": _wagon()})
+
+    with pytest.raises(ValueError, match="Unknown wagon type"):
+        system.add_wagon("MORTAR")
+
+
 # ----------------------------------------------------------------------
 # Mortar AoE
 # ----------------------------------------------------------------------

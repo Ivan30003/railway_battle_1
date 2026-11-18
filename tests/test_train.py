@@ -126,3 +126,24 @@ def test_wagons_list_is_copied() -> None:
 
     assert train.wagons == ["ICE"]
     assert train.wagon_count == 1
+
+
+def test_add_wagon_appends_a_car_to_the_back() -> None:
+    train = _train(wagons=["ICE"])
+    train.advance(100.0)
+
+    train.add_wagon("MORTAR")
+
+    assert train.wagons == ["ICE", "MORTAR"]
+    assert train.wagon_count == 2
+    cars = train.car_samples()
+    assert [car.kind for car in cars] == [LOCOMOTIVE, "ICE", "MORTAR"]
+    assert cars[-1].offset == pytest.approx(80.0)
+
+
+@pytest.mark.parametrize("kind", ["", None])
+def test_add_wagon_rejects_invalid_kinds(kind: str | None) -> None:
+    train = _train()
+
+    with pytest.raises(ValueError, match="Wagon kinds"):
+        train.add_wagon(kind)  # type: ignore[arg-type]
