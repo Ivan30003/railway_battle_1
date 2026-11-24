@@ -71,6 +71,15 @@ class Train:
     def locomotive_sample(self) -> RouteSample:
         return self.route.sample(self.travelled)
 
+    def center(self) -> tuple[float, float]:
+        """Average position of the locomotive and all wagons."""
+        cars = self.car_samples()
+        count = len(cars)
+        return (
+            sum(car.sample.position[0] for car in cars) / count,
+            sum(car.sample.position[1] for car in cars) / count,
+        )
+
     def car_samples(self) -> list[TrainCar]:
         """Return the locomotive followed by wagons, front to back."""
         cars = [TrainCar(LOCOMOTIVE, self.route.sample(self.travelled), 0.0)]

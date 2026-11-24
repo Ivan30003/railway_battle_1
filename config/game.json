@@ -42,9 +42,6 @@
     "maps/map1.txt",
     "maps/map2.txt"
   ],
-  "spawn": {
-    "spawn_margin": 32
-  },
   "wagon_configs": {
     "MACHINEGUN": {
       "radius": 150,

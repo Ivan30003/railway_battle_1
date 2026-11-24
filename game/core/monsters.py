@@ -1,6 +1,6 @@
 """Monsters: spawning, chasing, attacking and being crushed by the train.
 
-Monsters spawn beside the railway at ``spawn_margin`` pixels from the route,
+Monsters spawn on the screen edge opposite the average position of the train,
 then chase the locomotive. They attack from ``monster_attack_range`` plus their
 own radius, while a moving train crushes anything inside ``train_crush_radius``
 plus the monster radius. Crushing rewards gold but briefly slows the train.
@@ -17,7 +17,6 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from game.core.config import MonsterConfig, SpawnConfig
-from game.core.path import PathRoute
 from game.core.train import Train
 
 Point = tuple[float, float]
@@ -103,23 +102,32 @@ class Monster:
 
 
 class MonsterSpawner:
-    """Spawns monsters with a purchase-scaled cooldown and a distribution."""
+    """Spawns monsters on the screen edge opposite the train.
+
+    The train's average position (locomotive plus wagons) is compared with the
+    screen centre. Monsters appear on the opposite edge, so a train driving
+    along the right side of the map is attacked from the left side.
+    """
 
     def __init__(
         self,
-        route: PathRoute,
         spawn: SpawnConfig,
         monster_configs: Mapping[str, MonsterConfig],
         *,
+        world_size: Point,
+        train_center: Callable[[], Point],
         hit_radius: float,
         rng: random.Random | None = None,
         purchased_wagons: Callable[[], int] | None = None,
     ) -> None:
         if not monster_configs:
             raise ValueError("At least one monster type is required")
-        self.route = route
+        if world_size[0] <= 0.0 or world_size[1] <= 0.0:
+            raise ValueError("world_size must be positive")
         self.spawn = spawn
         self.monster_configs = dict(monster_configs)
+        self.world_size = (float(world_size[0]), float(world_size[1]))
+        self.train_center = train_center
         self.hit_radius = hit_radius
         self.rng = rng if rng is not None else random.Random()
         self.purchased_wagons = purchased_wagons if purchased_wagons is not None else lambda: 0
@@ -151,15 +159,6 @@ class MonsterSpawner:
         return spawned
 
     def spawn_one(self) -> Monster:
-        sample = self.route.sample(self.rng.uniform(0.0, self.route.total_length))
-        side = self.rng.choice((-1.0, 1.0))
-        perpendicular = (-sample.direction[1], sample.direction[0])
-        margin = self.spawn.spawn_margin * side
-        position = (
-            sample.position[0] + perpendicular[0] * margin,
-            sample.position[1] + perpendicular[1] * margin,
-        )
-
         kind = self._choose_kind()
         config = self.monster_configs.get(kind)
         if config is None:
@@ -168,7 +167,7 @@ class MonsterSpawner:
         radius = self.hit_radius * (_TANK_RADIUS_SCALE if kind == TANK_KIND else 1.0)
         return Monster(
             kind=kind,
-            position=position,
+            position=self._edge_position(radius),
             hp=config.hp,
             max_hp=config.hp,
             speed=config.speed,
@@ -178,6 +177,31 @@ class MonsterSpawner:
             radius=radius,
             attack_timer=config.attack_interval,
         )
+
+    def _edge_position(self, radius: float) -> Point:
+        """Pick a point on the screen edge opposite the train's average position.
+
+        ``radius`` is used as an inset so the whole monster sprite is visible
+        while its rim still touches the screen border.
+        """
+        width, height = self.world_size
+        train_x, train_y = self.train_center()
+        offset_x = (train_x - width / 2.0) / (width / 2.0)
+        offset_y = (train_y - height / 2.0) / (height / 2.0)
+        if abs(offset_x) >= abs(offset_y):
+            edge = "left" if offset_x > 0.0 else "right"
+        else:
+            edge = "top" if offset_y > 0.0 else "bottom"
+
+        inset_x = min(radius, width / 2.0)
+        inset_y = min(radius, height / 2.0)
+        if edge == "left":
+            return (inset_x, self.rng.uniform(inset_y, height - inset_y))
+        if edge == "right":
+            return (width - inset_x, self.rng.uniform(inset_y, height - inset_y))
+        if edge == "top":
+            return (self.rng.uniform(inset_x, width - inset_x), inset_y)
+        return (self.rng.uniform(inset_x, width - inset_x), height - inset_y)
 
     def _choose_kind(self) -> str:
         roll = self.rng.random()
@@ -205,10 +229,11 @@ class MonsterSystem:
 
     def __init__(
         self,
-        route: PathRoute,
         spawn: SpawnConfig,
         monster_configs: Mapping[str, MonsterConfig],
         *,
+        world_size: Point,
+        train_center: Callable[[], Point],
         attack_range: float,
         crush_radius: float,
         hit_radius: float,
@@ -217,9 +242,10 @@ class MonsterSystem:
         max_monsters: int = _DEFAULT_MAX_MONSTERS,
     ) -> None:
         self.spawner = MonsterSpawner(
-            route,
             spawn,
             monster_configs,
+            world_size=world_size,
+            train_center=train_center,
             hit_radius=hit_radius,
             rng=rng,
             purchased_wagons=purchased_wagons,

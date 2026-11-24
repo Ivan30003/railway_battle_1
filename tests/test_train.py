@@ -92,6 +92,23 @@ def test_wagons_wrap_around_the_start() -> None:
     assert wagon.sample.position == pytest.approx((0.0, 30.0))
 
 
+def test_center_averages_the_locomotive_and_wagons() -> None:
+    train = _train(wagon_spacing=40.0, wagons=["ICE", "MORTAR"], travelled=100.0)
+
+    # Locomotive (100, 0), wagons (60, 0) and (20, 0).
+    assert train.center() == pytest.approx((60.0, 0.0))
+
+
+def test_center_moves_with_the_train() -> None:
+    train = _train(wagon_spacing=40.0, wagons=["ICE"])
+    before = train.center()
+
+    train.advance(100.0)
+
+    assert before == pytest.approx((0.0, 20.0))
+    assert train.center() == pytest.approx((80.0, 0.0))
+
+
 def test_non_positive_dt_and_distance_do_not_move() -> None:
     train = _train(travelled=25.0)
 

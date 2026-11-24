@@ -100,9 +100,10 @@ class GameScene(Scene):
             wagons=list(wagons),
         )
         self.monsters = MonsterSystem(
-            self.map_data.route,
             self.app.config.spawn,
             self.app.config.monster_configs,
+            world_size=self.app.renderer.virtual_size,
+            train_center=self.train.center,
             attack_range=self.app.config.monster_attack_range,
             crush_radius=self.app.config.train_crush_radius,
             hit_radius=self.app.config.monster_hit_radius,

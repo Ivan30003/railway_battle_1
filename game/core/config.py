@@ -23,6 +23,7 @@ _LEGACY_SPAWN_KEYS = {
     "ramp_seconds",
     "tank_share_start",
     "tank_share_max",
+    "spawn_margin",
 }
 
 
@@ -47,7 +48,6 @@ class SpawnConfig:
     cooldown_step: float
     cooldown_min: float
     probability_spawn_dist_start: dict[str, float]
-    spawn_margin: float
 
 
 @dataclass(frozen=True)
@@ -138,7 +138,9 @@ class GameConfig:
             range=_positive_number(cannon.get("range"), "cannon.range"),
         )
 
-        spawn = _mapping(merged, "spawn")
+        spawn = merged.get("spawn")
+        if spawn is not None:
+            _reject_legacy_spawn_keys(_mapping(merged, "spawn"))
 
         maps_raw = merged.get("maps")
         if not isinstance(maps_raw, list) or not maps_raw:
@@ -168,17 +170,12 @@ class GameConfig:
                 merged.get("monsters_probability_spawn_dist_start"),
                 monster_configs,
             ),
-            spawn_margin=_non_negative_number(
-                spawn.get("spawn_margin"),
-                "spawn.spawn_margin",
-            ),
         )
         if spawn_cfg.cooldown_min > spawn_cfg.cooldown_start:
             raise ConfigError(
                 "monsters_cooldown_min must be less than or equal to "
                 "monsters_cooldown_start"
             )
-        _reject_legacy_spawn_keys(spawn)
         start_wagons = _parse_start_wagons(merged.get("start_wagons"), wagon_configs)
 
         ice_slow_per_wagon = _fraction(merged.get("ice_slow_per_wagon"), "ice_slow_per_wagon")
@@ -359,9 +356,8 @@ def _reject_legacy_spawn_keys(spawn: dict[str, Any]) -> None:
         return
     names = ", ".join(f"spawn.{key}" for key in legacy)
     raise ConfigError(
-        f"{names} are no longer supported; use monsters_cooldown_start, "
-        "monsters_cooldown_step, monsters_cooldown_min and "
-        "monsters_probability_spawn_dist_start"
+        f"{names} are no longer supported; monsters now spawn on the screen "
+        "edge opposite the train"
     )
 
 
@@ -487,9 +483,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "range": 450,
     },
     "maps": ["maps/map1.txt", "maps/map2.txt"],
-    "spawn": {
-        "spawn_margin": 32,
-    },
     "wagon_configs": {
         "MACHINEGUN": {
             "radius": 150,

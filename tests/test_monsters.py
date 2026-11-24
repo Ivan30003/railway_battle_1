@@ -33,7 +33,6 @@ def _spawn(**overrides: object) -> SpawnConfig:
         "cooldown_step": 0.0,
         "cooldown_min": 0.5,
         "probability_spawn_dist_start": {FAST_KIND: 1.0, TANK_KIND: 0.0},
-        "spawn_margin": 32.0,
     }
     params.update(overrides)
     return SpawnConfig(**params)  # type: ignore[arg-type]
@@ -61,34 +60,34 @@ def _monster_configs() -> dict[str, MonsterConfig]:
 class FakeRng:
     """Deterministic RNG with explicit values for each spawner decision."""
 
-    def __init__(
-        self,
-        *,
-        distance: float = 0.0,
-        side: float = 1.0,
-        roll: float = 0.5,
-    ) -> None:
+    def __init__(self, *, distance: float = 40.0, roll: float = 0.5) -> None:
         self.distance = distance
-        self.side = side
         self.roll = roll
 
     def uniform(self, start: float, end: float) -> float:
         return self.distance
 
-    def choice(self, values: tuple[float, ...]) -> float:
-        return self.side
-
     def random(self) -> float:
         return self.roll
 
 
-def _spawner(**overrides: object) -> MonsterSpawner:
+_WORLD_SIZE = (200.0, 100.0)
+
+
+def _spawner(
+    *,
+    train_center: tuple[float, float] = (150.0, 50.0),
+    distance: float = 40.0,
+    roll: float = 0.5,
+    **overrides: object,
+) -> MonsterSpawner:
     return MonsterSpawner(
-        _route(),
         _spawn(**overrides),
         _monster_configs(),
+        world_size=_WORLD_SIZE,
+        train_center=lambda: train_center,
         hit_radius=10.0,
-        rng=FakeRng(),
+        rng=FakeRng(distance=distance, roll=roll),
     )
 
 
@@ -109,9 +108,10 @@ def _monster(kind: str = FAST_KIND, position: tuple[float, float] = (0.0, 0.0)) 
 
 def _system(monsters: list[Monster] | None = None) -> MonsterSystem:
     system = MonsterSystem(
-        _route(),
         _spawn(cooldown_start=1000.0),
         _monster_configs(),
+        world_size=_WORLD_SIZE,
+        train_center=lambda: (100.0, 50.0),
         attack_range=24.0,
         crush_radius=18.0,
         hit_radius=10.0,
@@ -122,43 +122,53 @@ def _system(monsters: list[Monster] | None = None) -> MonsterSystem:
     return system
 
 
-def test_spawn_is_offset_from_the_route() -> None:
-    spawner = MonsterSpawner(
-        _route(),
-        _spawn(),
-        _monster_configs(),
-        hit_radius=10.0,
-        rng=FakeRng(distance=0.0, side=1.0, roll=0.5),
-    )
+def test_spawn_appears_on_the_edge_opposite_the_train() -> None:
+    spawner = _spawner(train_center=(150.0, 50.0), distance=40.0)
 
     monster = spawner.spawn_one()
-    assert monster.position == (0.0, 32.0)
+
+    assert monster.position == pytest.approx((10.0, 40.0))
     assert monster.kind == FAST_KIND
     assert monster.radius == pytest.approx(10.0)
     assert monster.attack_timer == pytest.approx(monster.attack_interval)
 
 
-def test_spawn_uses_the_other_side_of_the_route() -> None:
-    spawner = MonsterSpawner(
-        _route(),
-        _spawn(),
-        _monster_configs(),
-        hit_radius=10.0,
-        rng=FakeRng(distance=0.0, side=-1.0, roll=0.5),
+@pytest.mark.parametrize(
+    "train_center, expected",
+    [
+        ((150.0, 50.0), (10.0, 40.0)),
+        ((50.0, 50.0), (190.0, 40.0)),
+        ((100.0, 20.0), (40.0, 90.0)),
+        ((100.0, 80.0), (40.0, 10.0)),
+    ],
+)
+def test_spawn_uses_the_opposite_screen_edge(
+    train_center: tuple[float, float],
+    expected: tuple[float, float],
+) -> None:
+    spawner = _spawner(train_center=train_center, distance=40.0)
+
+    assert spawner.spawn_one().position == pytest.approx(expected)
+
+
+def test_spawn_stays_inside_the_screen_by_its_radius() -> None:
+    spawner = _spawner(
+        train_center=(150.0, 50.0),
+        distance=40.0,
+        probability_spawn_dist_start={FAST_KIND: 0.0, TANK_KIND: 1.0},
+        roll=0.0,
     )
 
-    assert spawner.spawn_one().position == (0.0, -32.0)
+    monster = spawner.spawn_one()
+
+    assert monster.kind == TANK_KIND
+    assert monster.position == pytest.approx((13.5, 40.0))
 
 
 def test_tank_is_chosen_by_probability() -> None:
-    spawner = MonsterSpawner(
-        _route(),
-        _spawn(
-            probability_spawn_dist_start={FAST_KIND: 0.0, TANK_KIND: 1.0}
-        ),
-        _monster_configs(),
-        hit_radius=10.0,
-        rng=FakeRng(roll=0.0),
+    spawner = _spawner(
+        probability_spawn_dist_start={FAST_KIND: 0.0, TANK_KIND: 1.0},
+        roll=0.0,
     )
 
     monster = spawner.spawn_one()
@@ -176,9 +186,10 @@ def test_spawn_waits_for_the_cooldown() -> None:
 def test_cooldown_decreases_with_each_purchased_wagon() -> None:
     purchased = 0
     spawner = MonsterSpawner(
-        _route(),
         _spawn(cooldown_start=2.0, cooldown_step=0.25, cooldown_min=1.0),
         _monster_configs(),
+        world_size=_WORLD_SIZE,
+        train_center=lambda: (100.0, 50.0),
         hit_radius=10.0,
         rng=FakeRng(),
         purchased_wagons=lambda: purchased,
@@ -194,14 +205,9 @@ def test_cooldown_decreases_with_each_purchased_wagon() -> None:
 
 
 def test_spawn_distribution_chooses_the_monster_kind() -> None:
-    spawner = MonsterSpawner(
-        _route(),
-        _spawn(
-            probability_spawn_dist_start={FAST_KIND: 0.75, TANK_KIND: 0.25}
-        ),
-        _monster_configs(),
-        hit_radius=10.0,
-        rng=FakeRng(roll=0.8),
+    spawner = _spawner(
+        probability_spawn_dist_start={FAST_KIND: 0.75, TANK_KIND: 0.25},
+        roll=0.8,
     )
 
     assert spawner.spawn_one().kind == TANK_KIND
@@ -212,9 +218,10 @@ def test_spawn_distribution_chooses_the_monster_kind() -> None:
 
 def test_initial_timer_uses_the_purchase_scaled_cooldown() -> None:
     spawner = MonsterSpawner(
-        _route(),
         _spawn(cooldown_start=2.0, cooldown_step=0.5, cooldown_min=0.5),
         _monster_configs(),
+        world_size=_WORLD_SIZE,
+        train_center=lambda: (100.0, 50.0),
         hit_radius=10.0,
         rng=FakeRng(),
         purchased_wagons=lambda: 2,
@@ -356,9 +363,10 @@ def test_dead_monsters_are_removed() -> None:
 
 def test_spawn_cap_is_respected() -> None:
     system = MonsterSystem(
-        _route(),
         _spawn(cooldown_start=1.0, cooldown_min=0.1),
         _monster_configs(),
+        world_size=_WORLD_SIZE,
+        train_center=lambda: (100.0, 50.0),
         attack_range=24.0,
         crush_radius=18.0,
         hit_radius=10.0,

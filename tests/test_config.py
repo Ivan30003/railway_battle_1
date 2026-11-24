@@ -33,7 +33,6 @@ def test_shipped_config_loads() -> None:
         "FAST_WEAK": 0.9,
         "SLOW_TANK": 0.1,
     }
-    assert config.spawn.spawn_margin == 32.0
     assert config.wagon_configs["SNIPER"].priority == ("SLOW_TANK", "FAST_WEAK")
     assert config.wagon_configs["MORTAR"].reserve == "primary"
     assert config.wagon_configs["MORTAR"].aoe_radius == 64.0
@@ -183,6 +182,10 @@ def test_invalid_json_raises(tmp_path: Path) -> None:
         ),
         (
             {"spawn": {"initial_interval": 1.0}},
+            "no longer supported",
+        ),
+        (
+            {"spawn": {"spawn_margin": 32}},
             "no longer supported",
         ),
     ],
