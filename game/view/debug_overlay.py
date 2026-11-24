@@ -54,7 +54,7 @@ class DebugOverlay:
             monster_line = (
                 f"monsters {len(monsters.monsters)}   slowed {slowed}   "
                 f"crushed {monsters.crushed_total}   "
-                f"spawn {monsters.spawner.spawn_interval:.2f}s   "
+                f"spawn {monsters.spawner.cooldown:.2f}s   "
                 f"slow {getattr(scene, '_crush_slow', 0.0):.2f}s   gold {scene.state.gold}"
             )
         combat = getattr(scene, "combat", None)

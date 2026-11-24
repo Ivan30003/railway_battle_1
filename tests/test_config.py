@@ -26,6 +26,14 @@ def test_shipped_config_loads() -> None:
     assert config.tile_size == 32
     assert set(config.wagon_configs) == {"MACHINEGUN", "ICE", "MORTAR", "SNIPER"}
     assert set(config.monster_configs) == {"FAST_WEAK", "SLOW_TANK"}
+    assert config.spawn.cooldown_start == 2.0
+    assert config.spawn.cooldown_step == 0.1
+    assert config.spawn.cooldown_min == 0.35
+    assert config.spawn.probability_spawn_dist_start == {
+        "FAST_WEAK": 0.9,
+        "SLOW_TANK": 0.1,
+    }
+    assert config.spawn.spawn_margin == 32.0
     assert config.wagon_configs["SNIPER"].priority == ("SLOW_TANK", "FAST_WEAK")
     assert config.wagon_configs["MORTAR"].reserve == "primary"
     assert config.wagon_configs["MORTAR"].aoe_radius == 64.0
@@ -48,6 +56,27 @@ def test_empty_object_uses_defaults() -> None:
     assert config.cannon.range == 450.0
     assert len(config.wagon_configs) == 4
     assert len(config.monster_configs) == 2
+    assert config.spawn.cooldown_start == 2.0
+    assert config.spawn.probability_spawn_dist_start == {
+        "FAST_WEAK": 0.9,
+        "SLOW_TANK": 0.1,
+    }
+
+
+def test_spawn_distribution_can_be_overridden() -> None:
+    config = GameConfig.from_dict(
+        {
+            "monsters_probability_spawn_dist_start": {
+                "FAST_WEAK": 0.25,
+                "SLOW_TANK": 0.75,
+            }
+        }
+    )
+
+    assert config.spawn.probability_spawn_dist_start == {
+        "FAST_WEAK": 0.25,
+        "SLOW_TANK": 0.75,
+    }
 
 
 def test_nested_override_keeps_other_defaults() -> None:
@@ -104,6 +133,57 @@ def test_invalid_json_raises(tmp_path: Path) -> None:
         (
             {"wagon_configs": {"SNIPER": {"priority": ["UNKNOWN"]}}},
             "unknown monster type",
+        ),
+        ({"monsters_cooldown_start": 0}, "monsters_cooldown_start"),
+        ({"monsters_cooldown_start": -1}, "monsters_cooldown_start"),
+        ({"monsters_cooldown_step": -0.1}, "monsters_cooldown_step"),
+        ({"monsters_cooldown_min": 0}, "monsters_cooldown_min"),
+        ({"monsters_cooldown_min": 5.0}, "monsters_cooldown_min"),
+        (
+            {
+                "monster_configs": {
+                    "BONUS": {
+                        "hp": 1,
+                        "speed": 1,
+                        "gold": 0,
+                        "damage": 0,
+                        "attack_interval": 1,
+                    }
+                }
+            },
+            "missing monster type",
+        ),
+        (
+            {
+                "monsters_probability_spawn_dist_start": {
+                    "FAST_WEAK": 0.5,
+                    "SLOW_TANK": 0.4,
+                }
+            },
+            "sum to 1.0",
+        ),
+        (
+            {
+                "monsters_probability_spawn_dist_start": {
+                    "FAST_WEAK": 0.5,
+                    "SLOW_TANK": 0.5,
+                    "UNKNOWN": 0.0,
+                }
+            },
+            "unknown monster type",
+        ),
+        (
+            {
+                "monsters_probability_spawn_dist_start": {
+                    "FAST_WEAK": -0.1,
+                    "SLOW_TANK": 1.1,
+                }
+            },
+            "monsters_probability_spawn_dist_start",
+        ),
+        (
+            {"spawn": {"initial_interval": 1.0}},
+            "no longer supported",
         ),
     ],
 )

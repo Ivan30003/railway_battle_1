@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 import random
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from game.core.config import MonsterConfig, SpawnConfig
@@ -103,7 +103,7 @@ class Monster:
 
 
 class MonsterSpawner:
-    """Spawns monsters with a ramping interval and tank probability."""
+    """Spawns monsters with a purchase-scaled cooldown and a distribution."""
 
     def __init__(
         self,
@@ -113,6 +113,7 @@ class MonsterSpawner:
         *,
         hit_radius: float,
         rng: random.Random | None = None,
+        purchased_wagons: Callable[[], int] | None = None,
     ) -> None:
         if not monster_configs:
             raise ValueError("At least one monster type is required")
@@ -121,37 +122,32 @@ class MonsterSpawner:
         self.monster_configs = dict(monster_configs)
         self.hit_radius = hit_radius
         self.rng = rng if rng is not None else random.Random()
-        self.elapsed = 0.0
-        self._timer = spawn.initial_interval
+        self.purchased_wagons = purchased_wagons if purchased_wagons is not None else lambda: 0
+        self._timer = self.cooldown
 
     @property
-    def ramp(self) -> float:
-        if self.spawn.ramp_seconds <= 0.0:
-            return 1.0
-        return min(self.elapsed / self.spawn.ramp_seconds, 1.0)
+    def cooldown(self) -> float:
+        """Enemy spawn cooldown for the current number of bought wagons.
 
-    @property
-    def spawn_interval(self) -> float:
-        return self.spawn.initial_interval + (
-            self.spawn.min_interval - self.spawn.initial_interval
-        ) * self.ramp
-
-    @property
-    def tank_share(self) -> float:
-        return self.spawn.tank_share_start + (
-            self.spawn.tank_share_max - self.spawn.tank_share_start
-        ) * self.ramp
+        The cooldown starts at ``cooldown_start`` and drops by ``cooldown_step``
+        for every wagon bought. ``purchased_wagons`` is the cumulative purchase
+        counter, so losing a wagon later does not make spawning slower again.
+        """
+        purchased = max(0, int(self.purchased_wagons()))
+        return max(
+            self.spawn.cooldown_min,
+            self.spawn.cooldown_start - self.spawn.cooldown_step * purchased,
+        )
 
     def update(self, dt: float) -> list[Monster]:
         """Advance the spawn timer and return all monsters spawned this tick."""
         if dt <= 0.0:
             return []
-        self.elapsed += dt
         self._timer -= dt
         spawned: list[Monster] = []
         while self._timer <= 0.0:
             spawned.append(self.spawn_one())
-            self._timer += self.spawn_interval
+            self._timer += self.cooldown
         return spawned
 
     def spawn_one(self) -> Monster:
@@ -164,7 +160,7 @@ class MonsterSpawner:
             sample.position[1] + perpendicular[1] * margin,
         )
 
-        kind = TANK_KIND if self.rng.random() < self.tank_share else FAST_KIND
+        kind = self._choose_kind()
         config = self.monster_configs.get(kind)
         if config is None:
             kind = next(iter(self.monster_configs))
@@ -182,6 +178,17 @@ class MonsterSpawner:
             radius=radius,
             attack_timer=config.attack_interval,
         )
+
+    def _choose_kind(self) -> str:
+        roll = self.rng.random()
+        cumulative = 0.0
+        last_kind = ""
+        for kind, probability in self.spawn.probability_spawn_dist_start.items():
+            last_kind = kind
+            cumulative += probability
+            if roll < cumulative:
+                return kind
+        return last_kind if last_kind else next(iter(self.monster_configs))
 
 
 @dataclass(frozen=True)
@@ -206,6 +213,7 @@ class MonsterSystem:
         crush_radius: float,
         hit_radius: float,
         rng: random.Random | None = None,
+        purchased_wagons: Callable[[], int] | None = None,
         max_monsters: int = _DEFAULT_MAX_MONSTERS,
     ) -> None:
         self.spawner = MonsterSpawner(
@@ -214,6 +222,7 @@ class MonsterSystem:
             monster_configs,
             hit_radius=hit_radius,
             rng=rng,
+            purchased_wagons=purchased_wagons,
         )
         self.monsters: list[Monster] = []
         self.attack_range = attack_range

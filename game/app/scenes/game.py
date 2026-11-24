@@ -107,6 +107,7 @@ class GameScene(Scene):
             crush_radius=self.app.config.train_crush_radius,
             hit_radius=self.app.config.monster_hit_radius,
             rng=random.Random(self.app.seed + self.state.map_index),
+            purchased_wagons=lambda: self.state.total_purchased,
         )
         self.combat = CombatSystem(
             self.app.config.cannon,

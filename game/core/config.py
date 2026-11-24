@@ -17,6 +17,15 @@ class ConfigError(ValueError):
     """Raised when the configuration file is missing or invalid."""
 
 
+_LEGACY_SPAWN_KEYS = {
+    "initial_interval",
+    "min_interval",
+    "ramp_seconds",
+    "tank_share_start",
+    "tank_share_max",
+}
+
+
 @dataclass(frozen=True)
 class WindowConfig:
     width: int
@@ -34,11 +43,10 @@ class CannonConfig:
 
 @dataclass(frozen=True)
 class SpawnConfig:
-    initial_interval: float
-    min_interval: float
-    ramp_seconds: float
-    tank_share_start: float
-    tank_share_max: float
+    cooldown_start: float
+    cooldown_step: float
+    cooldown_min: float
+    probability_spawn_dist_start: dict[str, float]
     spawn_margin: float
 
 
@@ -131,16 +139,6 @@ class GameConfig:
         )
 
         spawn = _mapping(merged, "spawn")
-        spawn_cfg = SpawnConfig(
-            initial_interval=_positive_number(
-                spawn.get("initial_interval"), "spawn.initial_interval"
-            ),
-            min_interval=_positive_number(spawn.get("min_interval"), "spawn.min_interval"),
-            ramp_seconds=_positive_number(spawn.get("ramp_seconds"), "spawn.ramp_seconds"),
-            tank_share_start=_fraction(spawn.get("tank_share_start"), "spawn.tank_share_start"),
-            tank_share_max=_fraction(spawn.get("tank_share_max"), "spawn.tank_share_max"),
-            spawn_margin=_non_negative_number(spawn.get("spawn_margin"), "spawn.spawn_margin"),
-        )
 
         maps_raw = merged.get("maps")
         if not isinstance(maps_raw, list) or not maps_raw:
@@ -153,6 +151,34 @@ class GameConfig:
 
         wagon_configs = _parse_wagon_configs(_mapping(merged, "wagon_configs"), merged)
         monster_configs = _parse_monster_configs(_mapping(merged, "monster_configs"))
+        spawn_cfg = SpawnConfig(
+            cooldown_start=_positive_number(
+                merged.get("monsters_cooldown_start"),
+                "monsters_cooldown_start",
+            ),
+            cooldown_step=_non_negative_number(
+                merged.get("monsters_cooldown_step"),
+                "monsters_cooldown_step",
+            ),
+            cooldown_min=_positive_number(
+                merged.get("monsters_cooldown_min"),
+                "monsters_cooldown_min",
+            ),
+            probability_spawn_dist_start=_parse_spawn_distribution(
+                merged.get("monsters_probability_spawn_dist_start"),
+                monster_configs,
+            ),
+            spawn_margin=_non_negative_number(
+                spawn.get("spawn_margin"),
+                "spawn.spawn_margin",
+            ),
+        )
+        if spawn_cfg.cooldown_min > spawn_cfg.cooldown_start:
+            raise ConfigError(
+                "monsters_cooldown_min must be less than or equal to "
+                "monsters_cooldown_start"
+            )
+        _reject_legacy_spawn_keys(spawn)
         start_wagons = _parse_start_wagons(merged.get("start_wagons"), wagon_configs)
 
         ice_slow_per_wagon = _fraction(merged.get("ice_slow_per_wagon"), "ice_slow_per_wagon")
@@ -291,6 +317,54 @@ def _parse_monster_configs(raw: dict[str, Any]) -> dict[str, MonsterConfig]:
     return result
 
 
+def _parse_spawn_distribution(
+    value: Any,
+    monster_configs: dict[str, MonsterConfig],
+) -> dict[str, float]:
+    if not isinstance(value, dict) or not value:
+        raise ConfigError(
+            "monsters_probability_spawn_dist_start must be a non-empty object"
+        )
+    known = set(monster_configs)
+    unknown = set(value) - known
+    if unknown:
+        names = ", ".join(sorted(unknown))
+        raise ConfigError(
+            "monsters_probability_spawn_dist_start references unknown "
+            f"monster type(s): {names}"
+        )
+    missing = known - set(value)
+    if missing:
+        names = ", ".join(sorted(missing))
+        raise ConfigError(
+            "monsters_probability_spawn_dist_start is missing monster type(s): "
+            f"{names}"
+        )
+
+    result: dict[str, float] = {}
+    for kind, probability in value.items():
+        result[kind] = _fraction(
+            probability,
+            f"monsters_probability_spawn_dist_start.{kind}",
+        )
+    total = sum(result.values())
+    if abs(total - 1.0) > 1e-6:
+        raise ConfigError("monsters_probability_spawn_dist_start must sum to 1.0")
+    return result
+
+
+def _reject_legacy_spawn_keys(spawn: dict[str, Any]) -> None:
+    legacy = sorted(_LEGACY_SPAWN_KEYS & set(spawn))
+    if not legacy:
+        return
+    names = ", ".join(f"spawn.{key}" for key in legacy)
+    raise ConfigError(
+        f"{names} are no longer supported; use monsters_cooldown_start, "
+        "monsters_cooldown_step, monsters_cooldown_min and "
+        "monsters_probability_spawn_dist_start"
+    )
+
+
 def _priority(
     value: Any, field: str, merged: dict[str, Any]
 ) -> tuple[str, ...] | None:
@@ -400,6 +474,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "monster_hit_radius": 10,
     "train_crush_radius": 18,
     "monster_attack_range": 24,
+    "monsters_cooldown_start": 2.0,
+    "monsters_cooldown_step": 0.1,
+    "monsters_cooldown_min": 0.35,
+    "monsters_probability_spawn_dist_start": {
+        "FAST_WEAK": 0.9,
+        "SLOW_TANK": 0.1,
+    },
     "cannon": {
         "damage": 30,
         "fire_interval": 0.35,
@@ -407,11 +488,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "maps": ["maps/map1.txt", "maps/map2.txt"],
     "spawn": {
-        "initial_interval": 2.0,
-        "min_interval": 0.35,
-        "ramp_seconds": 600,
-        "tank_share_start": 0.1,
-        "tank_share_max": 0.5,
         "spawn_margin": 32,
     },
     "wagon_configs": {

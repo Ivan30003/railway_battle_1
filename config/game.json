@@ -26,6 +26,13 @@
   "monster_hit_radius": 10,
   "train_crush_radius": 18,
   "monster_attack_range": 24,
+  "monsters_cooldown_start": 2.0,
+  "monsters_cooldown_step": 0.1,
+  "monsters_cooldown_min": 0.35,
+  "monsters_probability_spawn_dist_start": {
+    "FAST_WEAK": 0.9,
+    "SLOW_TANK": 0.1
+  },
   "cannon": {
     "damage": 30,
     "fire_interval": 0.35,
@@ -36,11 +43,6 @@
     "maps/map2.txt"
   ],
   "spawn": {
-    "initial_interval": 2.0,
-    "min_interval": 0.35,
-    "ramp_seconds": 600,
-    "tank_share_start": 0.1,
-    "tank_share_max": 0.5,
     "spawn_margin": 32
   },
   "wagon_configs": {

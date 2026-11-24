@@ -29,11 +29,10 @@ def _train(wagons: list[str] | None = None) -> Train:
 
 def _spawn(**overrides: object) -> SpawnConfig:
     params = {
-        "initial_interval": 2.0,
-        "min_interval": 0.5,
-        "ramp_seconds": 10.0,
-        "tank_share_start": 0.0,
-        "tank_share_max": 1.0,
+        "cooldown_start": 2.0,
+        "cooldown_step": 0.0,
+        "cooldown_min": 0.5,
+        "probability_spawn_dist_start": {FAST_KIND: 1.0, TANK_KIND: 0.0},
         "spawn_margin": 32.0,
     }
     params.update(overrides)
@@ -84,7 +83,6 @@ class FakeRng:
 
 
 def _spawner(**overrides: object) -> MonsterSpawner:
-    overrides.setdefault("tank_share_max", 0.0)
     return MonsterSpawner(
         _route(),
         _spawn(**overrides),
@@ -112,7 +110,7 @@ def _monster(kind: str = FAST_KIND, position: tuple[float, float] = (0.0, 0.0)) 
 def _system(monsters: list[Monster] | None = None) -> MonsterSystem:
     system = MonsterSystem(
         _route(),
-        _spawn(initial_interval=1000.0),
+        _spawn(cooldown_start=1000.0),
         _monster_configs(),
         attack_range=24.0,
         crush_radius=18.0,
@@ -155,7 +153,9 @@ def test_spawn_uses_the_other_side_of_the_route() -> None:
 def test_tank_is_chosen_by_probability() -> None:
     spawner = MonsterSpawner(
         _route(),
-        _spawn(tank_share_start=1.0, tank_share_max=1.0),
+        _spawn(
+            probability_spawn_dist_start={FAST_KIND: 0.0, TANK_KIND: 1.0}
+        ),
         _monster_configs(),
         hit_radius=10.0,
         rng=FakeRng(roll=0.0),
@@ -166,28 +166,63 @@ def test_tank_is_chosen_by_probability() -> None:
     assert monster.radius == pytest.approx(13.5)
 
 
-def test_spawn_waits_for_the_initial_interval() -> None:
-    spawner = _spawner(tank_share_max=0.0, min_interval=2.0)
+def test_spawn_waits_for_the_cooldown() -> None:
+    spawner = _spawner(cooldown_min=2.0)
 
     assert spawner.update(1.9) == []
     assert len(spawner.update(0.11)) == 1
 
 
-def test_interval_and_tank_share_ramp_up() -> None:
-    spawner = _spawner(tank_share_max=1.0)
-    spawner.update(5.0)
+def test_cooldown_decreases_with_each_purchased_wagon() -> None:
+    purchased = 0
+    spawner = MonsterSpawner(
+        _route(),
+        _spawn(cooldown_start=2.0, cooldown_step=0.25, cooldown_min=1.0),
+        _monster_configs(),
+        hit_radius=10.0,
+        rng=FakeRng(),
+        purchased_wagons=lambda: purchased,
+    )
 
-    assert spawner.spawn_interval == pytest.approx(1.25)
-    assert spawner.tank_share == pytest.approx(0.5)
-    assert spawner.ramp == pytest.approx(0.5)
+    assert spawner.cooldown == pytest.approx(2.0)
+
+    purchased = 2
+    assert spawner.cooldown == pytest.approx(1.5)
+
+    purchased = 10
+    assert spawner.cooldown == pytest.approx(1.0)
 
 
-def test_spawn_interval_never_goes_below_minimum() -> None:
-    spawner = _spawner(tank_share_max=1.0)
-    spawner.update(100.0)
+def test_spawn_distribution_chooses_the_monster_kind() -> None:
+    spawner = MonsterSpawner(
+        _route(),
+        _spawn(
+            probability_spawn_dist_start={FAST_KIND: 0.75, TANK_KIND: 0.25}
+        ),
+        _monster_configs(),
+        hit_radius=10.0,
+        rng=FakeRng(roll=0.8),
+    )
 
-    assert spawner.spawn_interval == pytest.approx(0.5)
-    assert spawner.tank_share == pytest.approx(1.0)
+    assert spawner.spawn_one().kind == TANK_KIND
+
+    spawner.rng = FakeRng(roll=0.1)
+    assert spawner.spawn_one().kind == FAST_KIND
+
+
+def test_initial_timer_uses_the_purchase_scaled_cooldown() -> None:
+    spawner = MonsterSpawner(
+        _route(),
+        _spawn(cooldown_start=2.0, cooldown_step=0.5, cooldown_min=0.5),
+        _monster_configs(),
+        hit_radius=10.0,
+        rng=FakeRng(),
+        purchased_wagons=lambda: 2,
+    )
+
+    assert spawner.cooldown == pytest.approx(1.0)
+    assert spawner.update(0.9) == []
+    assert len(spawner.update(0.11)) == 1
 
 
 def test_monster_moves_towards_the_locomotive() -> None:
@@ -322,7 +357,7 @@ def test_dead_monsters_are_removed() -> None:
 def test_spawn_cap_is_respected() -> None:
     system = MonsterSystem(
         _route(),
-        _spawn(initial_interval=1.0, min_interval=0.1, ramp_seconds=0.0),
+        _spawn(cooldown_start=1.0, cooldown_min=0.1),
         _monster_configs(),
         attack_range=24.0,
         crush_radius=18.0,

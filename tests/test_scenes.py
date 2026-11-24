@@ -464,6 +464,32 @@ def test_explicit_map_runs_a_single_map_campaign() -> None:
         pygame.quit()
 
 
+def test_spawn_cooldown_uses_purchases_not_the_live_train() -> None:
+    config = GameConfig.from_dict(
+        {
+            "start_gold": 100,
+            "monsters_cooldown_start": 2.0,
+            "monsters_cooldown_step": 0.25,
+            "monsters_cooldown_min": 0.5,
+        }
+    )
+    app = App(config, initial_scene="shop")
+    try:
+        game = app.scene_manager.current
+        assert game.monsters.spawner.cooldown == pytest.approx(2.0)
+
+        _press(app, pygame.K_1)
+
+        assert game.state.total_purchased == 1
+        assert game.monsters.spawner.cooldown == pytest.approx(1.75)
+
+        game.train.wagons.pop()  # simulate a destroyed wagon
+        assert len(game.train.wagons) == len(config.start_wagons)
+        assert game.monsters.spawner.cooldown == pytest.approx(1.75)
+    finally:
+        pygame.quit()
+
+
 def test_debug_toggle() -> None:
     config = GameConfig.load(DEFAULT_CONFIG_PATH)
     app = App(config, initial_scene="game", debug=False)
