@@ -5,9 +5,9 @@ then chase their target. They attack from ``monster_attack_range`` plus their
 own radius, while a moving train crushes anything inside ``train_crush_radius``
 plus the monster radius. Crushing rewards gold but briefly slows the train.
 
-Soldiers dropped by infantry wagons are a priority target: while at least one
-living soldier exists, every monster runs at the nearest one and ignores the
-train. A single monster attack kills a soldier.
+Soldiers dropped by infantry wagons are valid targets alongside the train: each
+monster attacks whichever is closer — the nearest living soldier or the nearest
+car. A single monster attack kills a soldier.
 
 Ice turrets stack ``slow_percent`` on a monster up to a cap and refresh its
 ``slow_timer``; while the timer runs the monster moves at ``effective_speed``.
@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from game.core.config import MonsterConfig, SpawnConfig
-from game.core.train import Train
+from game.core.train import Train, TrainCar
 
 Point = tuple[float, float]
 
@@ -298,11 +298,8 @@ class MonsterSystem:
         for monster in self.monsters:
             monster.attack_timer = max(0.0, monster.attack_timer - dt)
             monster.tick_slow(dt)
-            soldier = _nearest_soldier(monster.position, soldiers)
-            if soldier is not None:
-                target_position = soldier.position
-            else:
-                target_position = train.nearest_car(monster.position).sample.position
+            soldier, car = _choose_target(monster.position, soldiers, train)
+            target_position = soldier.position if soldier is not None else car.sample.position
             if monster.distance_to(target_position) > self.attack_range + monster.radius:
                 monster.move_toward(target_position, dt)
 
@@ -310,11 +307,8 @@ class MonsterSystem:
 
         soldiers_before = sum(1 for soldier in soldiers if soldier.is_alive)
         for monster in self.monsters:
-            soldier = _nearest_soldier(monster.position, soldiers)
-            if soldier is not None:
-                target_position = soldier.position
-            else:
-                target_position = train.nearest_car(monster.position).sample.position
+            soldier, car = _choose_target(monster.position, soldiers, train)
+            target_position = soldier.position if soldier is not None else car.sample.position
             reach = self.attack_range + monster.radius
             if monster.distance_to(target_position) > reach:
                 continue
@@ -325,7 +319,6 @@ class MonsterSystem:
                 # Soldiers are fragile: one monster attack is enough.
                 soldier.take_damage(monster.damage)
                 continue
-            car = train.nearest_car(monster.position)
             if car.wagon_index is None:
                 damage += monster.damage
             elif train.damage_wagon(car.wagon_index, monster.damage):
@@ -363,11 +356,38 @@ class MonsterSystem:
         return crushed, gold
 
 
+def _choose_target(
+    position: Point,
+    soldiers: list[SoldierLike],
+    train: Train,
+) -> tuple[SoldierLike | None, TrainCar]:
+    """Pick the closest target: the nearest living soldier or the nearest car.
+
+    Soldiers are no longer an automatic priority: a monster runs at whichever
+    target is closer. The nearest car is returned as a fallback so callers can
+    still resolve damage when the train wins.
+    """
+    car = train.nearest_car(position)
+    soldier = _nearest_soldier(position, soldiers)
+    if soldier is not None:
+        soldier_distance = math.hypot(
+            soldier.position[0] - position[0],
+            soldier.position[1] - position[1],
+        )
+        car_distance = math.hypot(
+            car.sample.position[0] - position[0],
+            car.sample.position[1] - position[1],
+        )
+        if soldier_distance < car_distance:
+            return soldier, car
+    return None, car
+
+
 def _nearest_soldier(
     position: Point,
     soldiers: list[SoldierLike],
 ) -> SoldierLike | None:
-    """Return the closest living soldier, which monsters always prefer."""
+    """Return the closest living soldier, if any."""
     best: SoldierLike | None = None
     best_distance = math.inf
     for soldier in soldiers:

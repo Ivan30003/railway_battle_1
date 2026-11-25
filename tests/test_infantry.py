@@ -203,12 +203,12 @@ def test_soldier_kill_awards_gold_and_removes_the_monster() -> None:
 
 
 # ----------------------------------------------------------------------
-# Monster priority
+# Monster targeting
 # ----------------------------------------------------------------------
-def test_monster_ignores_the_train_and_chases_a_soldier() -> None:
+def test_monster_chases_a_soldier_when_it_is_closer_than_the_train() -> None:
     system = _monster_system([_monster((0.0, 0.0))])
-    soldiers = [_soldier((100.0, 0.0))]
-    train = _train(travelled=0.0)  # locomotive at (0, 0)
+    soldiers = [_soldier((50.0, 0.0))]
+    train = _train(travelled=200.0)  # locomotive at (100, 100), far away
 
     result = system.update(0.1, train, soldiers=soldiers, train_moving=False)
 
@@ -217,10 +217,34 @@ def test_monster_ignores_the_train_and_chases_a_soldier() -> None:
     assert system.monsters[0].position[0] == pytest.approx(8.0)
 
 
+def test_monster_moves_toward_the_train_when_it_is_closer_than_a_soldier() -> None:
+    system = _monster_system([_monster((0.0, 0.0))])
+    soldiers = [_soldier((100.0, 0.0))]
+    train = _train(travelled=60.0)  # locomotive at (60, 0), closer than the soldier
+
+    result = system.update(0.1, train, soldiers=soldiers, train_moving=False)
+
+    assert result.damage == 0.0
+    assert result.soldiers_lost == 0
+    assert system.monsters[0].position[0] == pytest.approx(8.0)
+
+
+def test_monster_attacks_the_train_when_it_is_closer_than_a_soldier() -> None:
+    system = _monster_system([_monster((0.0, 0.0))])
+    soldiers = [_soldier((100.0, 0.0))]
+    train = _train(travelled=0.0)  # locomotive at (0, 0), on top of the monster
+
+    result = system.update(0.01, train, soldiers=soldiers, train_moving=False)
+
+    assert result.damage == pytest.approx(5.0)
+    assert result.soldiers_lost == 0
+    assert len(soldiers) == 1
+
+
 def test_monster_kills_a_soldier_in_one_attack() -> None:
     system = _monster_system([_monster((0.0, 0.0))])
     soldiers = [_soldier((20.0, 0.0))]
-    train = _train(travelled=0.0)
+    train = _train(travelled=200.0)  # locomotive far away
 
     result = system.update(0.01, train, soldiers=soldiers, train_moving=False)
 
@@ -231,8 +255,8 @@ def test_monster_kills_a_soldier_in_one_attack() -> None:
 
 def test_monster_returns_to_the_train_after_soldiers_are_gone() -> None:
     system = _monster_system([_monster((0.0, 0.0))])
-    soldiers = [_soldier((20.0, 0.0))]
-    train = _train(travelled=0.0)
+    soldiers = [_soldier((5.0, 0.0))]
+    train = _train(travelled=30.0)  # locomotive at (30, 0)
 
     system.update(0.01, train, soldiers=soldiers, train_moving=False)
     result = system.update(1.01, train, soldiers=soldiers, train_moving=False)

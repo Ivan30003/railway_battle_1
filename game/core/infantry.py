@@ -6,9 +6,9 @@ travel); the train keeps moving and leaves them behind. From that moment the
 soldiers are independent: they hold their ground and fire hitscan rifles at the
 nearest monster within ``soldier_range``.
 
-Soldiers are fragile by design: a single monster attack kills one. To make them
-worth their price, monsters treat any living soldier as a priority target and
-ignore the train until the soldiers are gone (see :mod:`game.core.monsters`).
+Soldiers are fragile by design: a single monster attack kills one. They still
+draw attention, because a monster attacks whichever target is closer — a living
+soldier or a car of the train (see :mod:`game.core.monsters`).
 """
 
 from __future__ import annotations
