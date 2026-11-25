@@ -86,12 +86,14 @@ def _soldier(position: tuple[float, float]) -> Soldier:
     assert config.soldier_range is not None
     assert config.soldier_fire_interval is not None
     assert config.soldier_radius is not None
+    assert config.soldier_speed is not None
     return Soldier(
         position=position,
         damage=config.soldier_damage,
         range=config.soldier_range,
         fire_interval=config.soldier_fire_interval,
         radius=config.soldier_radius,
+        speed=config.soldier_speed,
     )
 
 
@@ -179,7 +181,7 @@ def test_soldier_respects_its_fire_interval() -> None:
     assert monster.hp == pytest.approx(2.0)
 
 
-def test_soldier_ignores_monsters_outside_its_small_range() -> None:
+def test_soldier_does_not_shoot_at_monsters_outside_its_small_range() -> None:
     infantry = _infantry()
     infantry.soldiers = [_soldier((0.0, 0.0))]
     monster = _monster((200.0, 0.0))
@@ -188,6 +190,27 @@ def test_soldier_ignores_monsters_outside_its_small_range() -> None:
 
     assert result.shots == ()
     assert monster.hp == pytest.approx(10.0)
+
+
+def test_soldier_advances_slowly_toward_a_monster_out_of_range() -> None:
+    infantry = _infantry()
+    infantry.soldiers = [_soldier((0.0, 0.0))]
+    monster = _monster((300.0, 0.0))
+
+    result = infantry.update(1.0, _train(), [monster])
+
+    assert result.shots == ()
+    assert infantry.soldiers[0].position[0] == pytest.approx(24.0)
+
+
+def test_soldier_holds_position_once_the_monster_is_in_range() -> None:
+    infantry = _infantry()
+    infantry.soldiers = [_soldier((0.0, 0.0))]
+    monster = _monster((100.0, 0.0))
+
+    infantry.update(1.0, _train(), [monster])
+
+    assert infantry.soldiers[0].position == (0.0, 0.0)
 
 
 def test_soldier_kill_awards_gold_and_removes_the_monster() -> None:

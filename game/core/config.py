@@ -27,6 +27,7 @@ _INFANTRY_FIELDS = (
     "soldier_damage",
     "soldier_fire_interval",
     "soldier_radius",
+    "soldier_speed",
 )
 
 _LEGACY_SPAWN_KEYS = {
@@ -82,6 +83,7 @@ class WagonConfig:
     soldier_damage: float | None = None
     soldier_fire_interval: float | None = None
     soldier_radius: float | None = None
+    soldier_speed: float | None = None
 
 
 @dataclass(frozen=True)
@@ -309,6 +311,11 @@ def _parse_wagon_configs(raw: dict[str, Any], merged: dict[str, Any]) -> dict[st
             if item.get("soldier_radius") is not None
             else None
         )
+        soldier_speed = (
+            _positive_number(item.get("soldier_speed"), f"{prefix}.soldier_speed")
+            if item.get("soldier_speed") is not None
+            else None
+        )
         result[wagon_type] = WagonConfig(
             radius=_positive_number(item.get("radius"), f"{prefix}.radius"),
             rotation_speed_deg_per_sec=_positive_number(
@@ -333,6 +340,7 @@ def _parse_wagon_configs(raw: dict[str, Any], merged: dict[str, Any]) -> dict[st
             soldier_damage=soldier_damage,
             soldier_fire_interval=soldier_fire_interval,
             soldier_radius=soldier_radius,
+            soldier_speed=soldier_speed,
         )
         if wagon_type == INFANTRY_WAGON:
             missing = [
@@ -619,6 +627,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "soldier_damage": 4,
             "soldier_fire_interval": 1.2,
             "soldier_radius": 6,
+            "soldier_speed": 24,
         },
     },
     "monster_configs": {

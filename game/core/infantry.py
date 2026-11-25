@@ -3,8 +3,8 @@
 An infantry wagon releases a small squad every ``drop_interval`` seconds. The
 soldiers jump out on both sides of the wagon (perpendicular to the direction of
 travel); the train keeps moving and leaves them behind. From that moment the
-soldiers are independent: they hold their ground and fire hitscan rifles at the
-nearest monster within ``soldier_range``.
+soldiers are independent: they slowly advance toward the nearest monster and,
+once it is within ``soldier_range``, stop and fire hitscan rifles at it.
 
 Soldiers are fragile by design: a single monster attack kills one. They still
 draw attention, because a monster attacks whichever target is closer — a living
@@ -35,6 +35,7 @@ class Soldier:
     range: float
     fire_interval: float
     radius: float = 6.0
+    speed: float = 0.0
     hp: float = 1.0
     max_hp: float = 1.0
     cooldown: float = 0.0
@@ -46,6 +47,19 @@ class Soldier:
 
     def take_damage(self, amount: float) -> None:
         self.hp = max(0.0, self.hp - max(0.0, amount))
+
+    def move_toward(self, target: Point, dt: float) -> None:
+        """Walk toward ``target`` at ``speed`` for ``dt`` seconds."""
+        if self.speed <= 0.0 or dt <= 0.0:
+            return
+        distance = _distance(self.position, target)
+        if distance <= 0.0:
+            return
+        step = min(self.speed * dt, distance)
+        self.position = (
+            self.position[0] + (target[0] - self.position[0]) / distance * step,
+            self.position[1] + (target[1] - self.position[1]) / distance * step,
+        )
 
 
 @dataclass(frozen=True)
@@ -74,6 +88,7 @@ class InfantrySystem:
             "soldier_fire_interval",
         )
         self.soldier_radius = _required(config.soldier_radius, "soldier_radius")
+        self.soldier_speed = _required(config.soldier_speed, "soldier_speed")
         self.soldiers: list[Soldier] = []
         self.spawned_total = 0
         self._kinds: list[str] = []
@@ -91,7 +106,7 @@ class InfantrySystem:
 
         self._sync(train)
         spawned = self._drop(dt, train)
-        shots, kills, gold = self._fire(dt, monsters)
+        shots, kills, gold = self._advance_and_fire(dt, monsters)
         return InfantryUpdate(
             shots=shots,
             kills=kills,
@@ -172,13 +187,14 @@ class InfantrySystem:
                     range=self.soldier_range,
                     fire_interval=self.soldier_fire_interval,
                     radius=self.soldier_radius,
+                    speed=self.soldier_speed,
                 )
             )
 
     # ------------------------------------------------------------------
-    # Rifle fire
+    # Movement and rifle fire
     # ------------------------------------------------------------------
-    def _fire(
+    def _advance_and_fire(
         self,
         dt: float,
         monsters: list[Monster],
@@ -186,10 +202,14 @@ class InfantrySystem:
         shots: list[Shot] = []
         for soldier in self.soldiers:
             soldier.cooldown = max(0.0, soldier.cooldown - dt)
-            target = _nearest_monster(soldier.position, soldier.range, monsters)
+            target = _nearest_monster(soldier.position, math.inf, monsters)
             if target is None:
                 continue
             soldier.angle_deg = _angle_to(soldier.position, target.position)
+            if _distance(soldier.position, target.position) > soldier.range:
+                # Advance slowly until the target enters rifle range.
+                soldier.move_toward(target.position, dt)
+                continue
             if soldier.cooldown > 0.0:
                 continue
             soldier.cooldown = soldier.fire_interval
@@ -218,16 +238,17 @@ def _required(value: float | int | None, field: str) -> float:
     return float(value)
 
 
+def _distance(a: Point, b: Point) -> float:
+    return math.hypot(b[0] - a[0], b[1] - a[1])
+
+
 def _nearest_monster(position: Point, reach: float, monsters: list[Monster]) -> Monster | None:
     best: Monster | None = None
     best_distance = math.inf
     for monster in monsters:
         if not monster.is_alive:
             continue
-        distance = math.hypot(
-            monster.position[0] - position[0],
-            monster.position[1] - position[1],
-        )
+        distance = _distance(position, monster.position)
         if distance > reach:
             continue
         if distance < best_distance:

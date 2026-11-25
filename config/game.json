@@ -104,7 +104,8 @@
       "soldier_range": 120,
       "soldier_damage": 4,
       "soldier_fire_interval": 1.2,
-      "soldier_radius": 6
+      "soldier_radius": 6,
+      "soldier_speed": 24
     }
   },
   "monster_configs": {
