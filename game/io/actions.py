@@ -17,3 +17,4 @@ class Action(Enum):
     BUY_ICE = "buy_ice"
     BUY_MORTAR = "buy_mortar"
     BUY_SNIPER = "buy_sniper"
+    BUY_INFANTRY = "buy_infantry"

@@ -17,6 +17,18 @@ class ConfigError(ValueError):
     """Raised when the configuration file is missing or invalid."""
 
 
+INFANTRY_WAGON = "INFANTRY"
+
+_INFANTRY_FIELDS = (
+    "drop_interval",
+    "soldiers_per_drop",
+    "drop_offset",
+    "soldier_range",
+    "soldier_damage",
+    "soldier_fire_interval",
+    "soldier_radius",
+)
+
 _LEGACY_SPAWN_KEYS = {
     "initial_interval",
     "min_interval",
@@ -62,6 +74,14 @@ class WagonConfig:
     reserve: str
     slow_percent: float | None = None
     aoe_radius: float | None = None
+    # Infantry-only fields. Other wagon types leave them as ``None``.
+    drop_interval: float | None = None
+    soldiers_per_drop: int | None = None
+    drop_offset: float | None = None
+    soldier_range: float | None = None
+    soldier_damage: float | None = None
+    soldier_fire_interval: float | None = None
+    soldier_radius: float | None = None
 
 
 @dataclass(frozen=True)
@@ -251,6 +271,44 @@ def _parse_wagon_configs(raw: dict[str, Any], merged: dict[str, Any]) -> dict[st
             if item.get("aoe_radius") is not None
             else None
         )
+        drop_interval = (
+            _positive_number(item.get("drop_interval"), f"{prefix}.drop_interval")
+            if item.get("drop_interval") is not None
+            else None
+        )
+        soldiers_per_drop = (
+            _positive_int(item.get("soldiers_per_drop"), f"{prefix}.soldiers_per_drop")
+            if item.get("soldiers_per_drop") is not None
+            else None
+        )
+        drop_offset = (
+            _positive_number(item.get("drop_offset"), f"{prefix}.drop_offset")
+            if item.get("drop_offset") is not None
+            else None
+        )
+        soldier_range = (
+            _positive_number(item.get("soldier_range"), f"{prefix}.soldier_range")
+            if item.get("soldier_range") is not None
+            else None
+        )
+        soldier_damage = (
+            _non_negative_number(item.get("soldier_damage"), f"{prefix}.soldier_damage")
+            if item.get("soldier_damage") is not None
+            else None
+        )
+        soldier_fire_interval = (
+            _positive_number(
+                item.get("soldier_fire_interval"),
+                f"{prefix}.soldier_fire_interval",
+            )
+            if item.get("soldier_fire_interval") is not None
+            else None
+        )
+        soldier_radius = (
+            _positive_number(item.get("soldier_radius"), f"{prefix}.soldier_radius")
+            if item.get("soldier_radius") is not None
+            else None
+        )
         result[wagon_type] = WagonConfig(
             radius=_positive_number(item.get("radius"), f"{prefix}.radius"),
             rotation_speed_deg_per_sec=_positive_number(
@@ -261,13 +319,31 @@ def _parse_wagon_configs(raw: dict[str, Any], merged: dict[str, Any]) -> dict[st
             damage=_non_negative_number(item.get("damage"), f"{prefix}.damage"),
             hp=_positive_number(item.get("hp"), f"{prefix}.hp"),
             aim_threshold_deg=_non_negative_number(
-                item.get("aim_threshold_deg"), f"{prefix}.aim_threshold_deg"
+                item.get("aim_threshold_deg"),
+                f"{prefix}.aim_threshold_deg",
             ),
             priority=priority,
             reserve=reserve,
             slow_percent=slow_percent,
             aoe_radius=aoe_radius,
+            drop_interval=drop_interval,
+            soldiers_per_drop=soldiers_per_drop,
+            drop_offset=drop_offset,
+            soldier_range=soldier_range,
+            soldier_damage=soldier_damage,
+            soldier_fire_interval=soldier_fire_interval,
+            soldier_radius=soldier_radius,
         )
+        if wagon_type == INFANTRY_WAGON:
+            missing = [
+                field
+                for field in _INFANTRY_FIELDS
+                if getattr(result[wagon_type], field) is None
+            ]
+            if missing:
+                raise ConfigError(
+                    f"{prefix}.{missing[0]} is required for {INFANTRY_WAGON}"
+                )
     return result
 
 
@@ -526,6 +602,23 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "aim_threshold_deg": 5,
             "priority": ["SLOW_TANK", "FAST_WEAK"],
             "reserve": "target",
+        },
+        "INFANTRY": {
+            "radius": 10,
+            "rotation_speed_deg_per_sec": 360,
+            "fire_interval": 1.0,
+            "damage": 0,
+            "hp": 30,
+            "aim_threshold_deg": 7,
+            "priority": None,
+            "reserve": "none",
+            "drop_interval": 8.0,
+            "soldiers_per_drop": 2,
+            "drop_offset": 26,
+            "soldier_range": 120,
+            "soldier_damage": 4,
+            "soldier_fire_interval": 1.2,
+            "soldier_radius": 6,
         },
     },
     "monster_configs": {

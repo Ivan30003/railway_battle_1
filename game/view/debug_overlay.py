@@ -66,6 +66,14 @@ class DebugOverlay:
                 f"damage {combat.damage_total:.0f}   "
                 f"reserved {combat.reservations.count}"
             )
+        infantry = getattr(scene, "infantry", None)
+        if infantry is None:
+            infantry_line = "infantry -"
+        else:
+            infantry_line = (
+                f"infantry soldiers {len(infantry.soldiers)}   "
+                f"dropped {infantry.spawned_total}"
+            )
 
         lines = [
             f"FPS {app.fps:5.1f}   frame {app.frame_ms:5.1f} ms   frame #{app.frame_index}",
@@ -80,6 +88,7 @@ class DebugOverlay:
             train_line,
             monster_line,
             combat_line,
+            infantry_line,
             f"seed {app.seed}   config {config_path}",
             "F1 debug   B shop   Esc pause   M menu",
         ]

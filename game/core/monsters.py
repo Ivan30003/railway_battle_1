@@ -1,9 +1,13 @@
 """Monsters: spawning, chasing, attacking and being crushed by the train.
 
 Monsters spawn on the screen edge opposite the average position of the train,
-then chase the locomotive. They attack from ``monster_attack_range`` plus their
+then chase their target. They attack from ``monster_attack_range`` plus their
 own radius, while a moving train crushes anything inside ``train_crush_radius``
 plus the monster radius. Crushing rewards gold but briefly slows the train.
+
+Soldiers dropped by infantry wagons are a priority target: while at least one
+living soldier exists, every monster runs at the nearest one and ignores the
+train. A single monster attack kills a soldier.
 
 Ice turrets stack ``slow_percent`` on a monster up to a cap and refresh its
 ``slow_timer``; while the timer runs the monster moves at ``effective_speed``.
@@ -15,6 +19,7 @@ import math
 import random
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from typing import Protocol
 
 from game.core.config import MonsterConfig, SpawnConfig
 from game.core.train import Train
@@ -25,6 +30,18 @@ FAST_KIND = "FAST_WEAK"
 TANK_KIND = "SLOW_TANK"
 _TANK_RADIUS_SCALE = 1.35
 _DEFAULT_MAX_MONSTERS = 300
+
+
+class SoldierLike(Protocol):
+    """Minimal interface the monster system needs from a soldier."""
+
+    position: Point
+    radius: float
+
+    @property
+    def is_alive(self) -> bool: ...
+
+    def take_damage(self, amount: float) -> None: ...
 
 
 @dataclass
@@ -223,6 +240,7 @@ class MonsterUpdate:
     gold: int = 0
     crushed: int = 0
     destroyed_wagons: tuple[int, ...] = ()
+    soldiers_lost: int = 0
 
 
 class MonsterSystem:
@@ -262,10 +280,13 @@ class MonsterSystem:
         dt: float,
         train: Train,
         *,
+        soldiers: list[SoldierLike] | None = None,
         train_moving: bool = True,
     ) -> MonsterUpdate:
         if dt <= 0.0:
             return MonsterUpdate()
+
+        soldiers = soldiers if soldiers is not None else []
 
         for monster in self.spawner.update(dt):
             if len(self.monsters) < self.max_monsters:
@@ -277,27 +298,41 @@ class MonsterSystem:
         for monster in self.monsters:
             monster.attack_timer = max(0.0, monster.attack_timer - dt)
             monster.tick_slow(dt)
-            target = train.nearest_car(monster.position)
-            target_position = target.sample.position
+            soldier = _nearest_soldier(monster.position, soldiers)
+            if soldier is not None:
+                target_position = soldier.position
+            else:
+                target_position = train.nearest_car(monster.position).sample.position
             if monster.distance_to(target_position) > self.attack_range + monster.radius:
                 monster.move_toward(target_position, dt)
 
         crushed, gold = self._crush(train) if train_moving else (0, 0)
 
+        soldiers_before = sum(1 for soldier in soldiers if soldier.is_alive)
         for monster in self.monsters:
-            target = train.nearest_car(monster.position)
-            target_position = target.sample.position
+            soldier = _nearest_soldier(monster.position, soldiers)
+            if soldier is not None:
+                target_position = soldier.position
+            else:
+                target_position = train.nearest_car(monster.position).sample.position
             reach = self.attack_range + monster.radius
             if monster.distance_to(target_position) > reach:
                 continue
             if monster.attack_timer > 0.0:
                 continue
             monster.attack_timer = monster.attack_interval
-            if target.wagon_index is None:
+            if soldier is not None:
+                # Soldiers are fragile: one monster attack is enough.
+                soldier.take_damage(monster.damage)
+                continue
+            car = train.nearest_car(monster.position)
+            if car.wagon_index is None:
                 damage += monster.damage
-            elif train.damage_wagon(target.wagon_index, monster.damage):
-                destroyed_wagons.append(target.wagon_index)
+            elif train.damage_wagon(car.wagon_index, monster.damage):
+                destroyed_wagons.append(car.wagon_index)
 
+        soldiers[:] = [soldier for soldier in soldiers if soldier.is_alive]
+        soldiers_lost = soldiers_before - len(soldiers)
         self.monsters = [monster for monster in self.monsters if monster.is_alive]
         self.crushed_total += crushed
         return MonsterUpdate(
@@ -305,6 +340,7 @@ class MonsterSystem:
             gold=gold,
             crushed=crushed,
             destroyed_wagons=tuple(destroyed_wagons),
+            soldiers_lost=soldiers_lost,
         )
 
     def _crush(self, train: Train) -> tuple[int, int]:
@@ -325,3 +361,23 @@ class MonsterSystem:
                 survivors.append(monster)
         self.monsters = survivors
         return crushed, gold
+
+
+def _nearest_soldier(
+    position: Point,
+    soldiers: list[SoldierLike],
+) -> SoldierLike | None:
+    """Return the closest living soldier, which monsters always prefer."""
+    best: SoldierLike | None = None
+    best_distance = math.inf
+    for soldier in soldiers:
+        if not soldier.is_alive:
+            continue
+        distance = math.hypot(
+            soldier.position[0] - position[0],
+            soldier.position[1] - position[1],
+        )
+        if distance < best_distance:
+            best_distance = distance
+            best = soldier
+    return best

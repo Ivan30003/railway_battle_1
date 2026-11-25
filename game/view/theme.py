@@ -39,3 +39,6 @@ class Theme:
     ice: Color = (132, 208, 240)
     ice_dim: Color = (64, 118, 150)
     slow: Color = (144, 216, 246)
+    soldier: Color = (124, 196, 138)
+    soldier_dark: Color = (58, 106, 70)
+    soldier_rifle: Color = (208, 214, 222)

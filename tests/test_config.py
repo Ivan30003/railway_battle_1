@@ -24,7 +24,13 @@ def test_shipped_config_loads() -> None:
     assert config.start_gold == 0
     assert config.maps == ("maps/map1.txt", "maps/map2.txt")
     assert config.tile_size == 32
-    assert set(config.wagon_configs) == {"MACHINEGUN", "ICE", "MORTAR", "SNIPER"}
+    assert set(config.wagon_configs) == {
+        "MACHINEGUN",
+        "ICE",
+        "MORTAR",
+        "SNIPER",
+        "INFANTRY",
+    }
     assert set(config.monster_configs) == {"FAST_WEAK", "SLOW_TANK"}
     assert config.spawn.cooldown_start == 2.0
     assert config.spawn.cooldown_step == 0.1
@@ -38,6 +44,14 @@ def test_shipped_config_loads() -> None:
     assert config.wagon_configs["MORTAR"].aoe_radius == 64.0
     assert config.wagon_configs["ICE"].aoe_radius == 48.0
     assert config.wagon_configs["ICE"].slow_percent == 0.2
+    assert config.wagon_configs["INFANTRY"].drop_interval == 8.0
+    assert config.wagon_configs["INFANTRY"].soldiers_per_drop == 2
+    assert config.wagon_configs["INFANTRY"].drop_offset == 26.0
+    assert config.wagon_configs["INFANTRY"].soldier_range == 120.0
+    assert config.wagon_configs["INFANTRY"].soldier_damage == 4.0
+    assert config.wagon_configs["INFANTRY"].soldier_fire_interval == 1.2
+    assert config.wagon_configs["INFANTRY"].soldier_radius == 6.0
+    assert config.wagon_configs["INFANTRY"].hp == 30.0
     assert config.ice_slow_per_wagon == 0.2
     assert config.ice_slow_max == 0.8
     assert config.ice_slow_duration == 3.0
@@ -53,7 +67,7 @@ def test_empty_object_uses_defaults() -> None:
     assert config.start_wagons == ("MACHINEGUN", "ICE")
     assert config.crush_slow_factor == 0.5
     assert config.cannon.range == 450.0
-    assert len(config.wagon_configs) == 4
+    assert len(config.wagon_configs) == 5
     assert len(config.monster_configs) == 2
     assert config.spawn.cooldown_start == 2.0
     assert config.spawn.probability_spawn_dist_start == {
@@ -120,6 +134,23 @@ def test_invalid_json_raises(tmp_path: Path) -> None:
         ({"mortar_aoe_radius": 0}, "mortar_aoe_radius"),
         ({"wagon_configs": {"ICE": {"slow_percent": 1.5}}}, "slow_percent"),
         ({"wagon_configs": {"MORTAR": {"aoe_radius": 0}}}, "aoe_radius"),
+        ({"wagon_configs": {"INFANTRY": {"drop_interval": 0}}}, "drop_interval"),
+        (
+            {"wagon_configs": {"INFANTRY": {"soldiers_per_drop": 0}}},
+            "soldiers_per_drop",
+        ),
+        (
+            {"wagon_configs": {"INFANTRY": {"drop_interval": None}}},
+            "drop_interval is required",
+        ),
+        (
+            {"wagon_configs": {"INFANTRY": {"soldier_damage": -1}}},
+            "soldier_damage",
+        ),
+        (
+            {"wagon_configs": {"INFANTRY": {"soldier_range": 0}}},
+            "soldier_range",
+        ),
         ({"crush_slow_factor": 1.5}, "crush_slow_factor"),
         ({"crush_slow_factor": -0.1}, "crush_slow_factor"),
         ({"maps": []}, "maps"),

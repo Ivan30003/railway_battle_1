@@ -88,21 +88,38 @@
         "FAST_WEAK"
       ],
       "reserve": "target"
+    },
+    "INFANTRY": {
+      "radius": 10,
+      "rotation_speed_deg_per_sec": 360,
+      "fire_interval": 1.0,
+      "damage": 0,
+      "hp": 30,
+      "aim_threshold_deg": 7,
+      "priority": null,
+      "reserve": "none",
+      "drop_interval": 8.0,
+      "soldiers_per_drop": 2,
+      "drop_offset": 26,
+      "soldier_range": 120,
+      "soldier_damage": 4,
+      "soldier_fire_interval": 1.2,
+      "soldier_radius": 6
     }
   },
   "monster_configs": {
     "FAST_WEAK": {
-      "hp": 10,
+      "hp": 20,
       "speed": 80,
       "gold": 1,
       "damage": 5,
       "attack_interval": 1.0
     },
     "SLOW_TANK": {
-      "hp": 50,
+      "hp": 80,
       "speed": 30,
       "gold": 5,
-      "damage": 15,
+      "damage": 12,
       "attack_interval": 1.5
     }
   }

@@ -15,13 +15,16 @@ import pygame
 
 from game.app.scene import Scene
 from game.core.combat import CombatSystem
+from game.core.config import INFANTRY_WAGON
 from game.core.game_state import GamePhase, GameState
+from game.core.infantry import InfantrySystem
 from game.core.monsters import MonsterSystem
 from game.core.shop import Shop
 from game.core.train import Train
 from game.io.actions import Action
 from game.io.input import InputState
 from game.view.camera import Camera
+from game.view.infantry_layer import InfantryLayer
 from game.view.monster_layer import MonsterLayer
 from game.view.renderer import Renderer
 from game.view.track_layer import TrackLayer
@@ -34,13 +37,15 @@ _WAGON_LABELS = {
     "ICE": "Ледяной",
     "MORTAR": "Миномётный",
     "SNIPER": "Снайперский",
+    "INFANTRY": "Пехотный",
 }
-_WAGON_ORDER = ("MACHINEGUN", "ICE", "MORTAR", "SNIPER")
+_WAGON_ORDER = ("MACHINEGUN", "ICE", "MORTAR", "SNIPER", "INFANTRY")
 _BUY_ACTIONS = {
     "MACHINEGUN": Action.BUY_MACHINEGUN,
     "ICE": Action.BUY_ICE,
     "MORTAR": Action.BUY_MORTAR,
     "SNIPER": Action.BUY_SNIPER,
+    "INFANTRY": Action.BUY_INFANTRY,
 }
 
 
@@ -62,6 +67,7 @@ class GameScene(Scene):
         )
         self.track_layer = TrackLayer(app.theme)
         self.train_layer = TrainLayer(app.theme)
+        self.infantry_layer = InfantryLayer(app.theme)
         self.monster_layer = MonsterLayer(app.theme)
         self.turret_layer = TurretLayer(app.theme)
 
@@ -73,7 +79,7 @@ class GameScene(Scene):
         self._damage_flash = 0.0
         self._crush_slow = 0.0
         self._map_banner = 2.4
-        self._shop_message = "1–4 или ЛКМ — купить"
+        self._shop_message = "1–5 или ЛКМ — купить"
         self._shop_message_ok: bool | None = None
         if start_in_shop:
             self.state.phase = GamePhase.SHOP
@@ -132,6 +138,9 @@ class GameScene(Scene):
             ice_slow_duration=self.app.config.ice_slow_duration,
             mortar_aoe_radius=self.app.config.mortar_aoe_radius,
         )
+        self.infantry = InfantrySystem(
+            self.app.config.wagon_configs[INFANTRY_WAGON]
+        )
 
     def _load_level(self) -> None:
         """Switch to the current map while keeping the run-wide state."""
@@ -141,6 +150,7 @@ class GameScene(Scene):
         self.map_data = self.app.set_map(self.state.map_index)
         self.camera = Camera()
         self.turret_layer = TurretLayer(self.app.theme)
+        self.infantry_layer = InfantryLayer(self.app.theme)
         self._create_systems(wagons, wagon_health, wagon_max_health)
         self._lap_flash = 0.0
         self._damage_flash = 0.0
@@ -181,7 +191,7 @@ class GameScene(Scene):
         self._shop_icon = pygame.Rect(width - 104, 8, 96, 26)
 
         panel_width = min(460, width - 32)
-        panel_height = min(330, height - 48)
+        panel_height = min(430, height - 48)
         left = (width - panel_width) // 2
         top = (height - panel_height) // 2
         self._shop_panel = pygame.Rect(left, top, panel_width, panel_height)
@@ -302,7 +312,12 @@ class GameScene(Scene):
         if laps == 0 and self._lap_flash > 0.0:
             self._lap_flash = max(0.0, self._lap_flash - dt)
 
-        result = self.monsters.update(dt, self.train, train_moving=train_moving)
+        result = self.monsters.update(
+            dt,
+            self.train,
+            soldiers=self.infantry.soldiers,
+            train_moving=train_moving,
+        )
         if result.crushed:
             seconds = self.app.config.train_stop_per_crush_ms / 1000.0
             self._crush_slow += result.crushed * seconds
@@ -316,6 +331,15 @@ class GameScene(Scene):
         if result.damage:
             self.state.locomotive_hp = max(0.0, self.state.locomotive_hp - result.damage)
             self._damage_flash = 0.45
+
+        infantry = self.infantry.update(dt, self.train, self.monsters.monsters)
+        if infantry.shots:
+            self.turret_layer.add_shots(infantry.shots)
+        if infantry.gold:
+            self.state.gold += infantry.gold
+            stats.gold_earned += infantry.gold
+        if infantry.kills:
+            stats.kills += infantry.kills
 
         combat = self.combat.update(
             dt,
@@ -386,6 +410,7 @@ class GameScene(Scene):
         )
         self.monster_layer.draw(renderer, self.monsters.monsters)
         self.train_layer.draw(renderer, self.train, self.map_data.tile_size)
+        self.infantry_layer.draw(renderer, self.infantry.soldiers)
         self.turret_layer.draw(renderer, self.combat, self.train, self.map_data.tile_size)
         self.turret_layer.draw_tracers(renderer)
         self.turret_layer.draw_effects(renderer)

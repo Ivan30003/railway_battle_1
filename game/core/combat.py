@@ -22,7 +22,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from game.core.config import CannonConfig, WagonConfig
+from game.core.config import INFANTRY_WAGON, CannonConfig, WagonConfig
 from game.core.monsters import Monster
 from game.core.path import RouteSample
 from game.core.train import Train
@@ -336,6 +336,11 @@ class CombatSystem:
         shots: list[Shot],
         blasts: list[Blast],
     ) -> float:
+        if turret.kind == INFANTRY_WAGON:
+            # Infantry wagons do not aim or shoot; their soldiers fight instead.
+            turret.target = None
+            return 0.0
+
         turret.cooldown = max(0.0, turret.cooldown - dt)
         if turret.angle_deg is None:
             turret.angle_deg = _direction_angle(sample.direction)

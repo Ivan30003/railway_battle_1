@@ -25,6 +25,8 @@ _KEY_ACTIONS: dict[int, Action] = {
     pygame.K_KP3: Action.BUY_MORTAR,
     pygame.K_4: Action.BUY_SNIPER,
     pygame.K_KP4: Action.BUY_SNIPER,
+    pygame.K_5: Action.BUY_INFANTRY,
+    pygame.K_KP5: Action.BUY_INFANTRY,
 }
 
 

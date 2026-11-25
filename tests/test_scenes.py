@@ -183,6 +183,47 @@ def test_destroyed_wagon_disappears_with_its_turret() -> None:
         pygame.quit()
 
 
+def test_infantry_wagon_drops_soldiers_and_renders() -> None:
+    config = dataclasses.replace(
+        GameConfig.load(DEFAULT_CONFIG_PATH),
+        start_wagons=("INFANTRY",),
+    )
+    app = App(config, initial_scene="game")
+    try:
+        game = app.scene_manager.current
+        game.combat.cannon.range = -1.0
+        game.monsters.spawner._timer = 10000.0
+
+        game.update(8.05, app.input)
+
+        assert [turret.kind for turret in game.combat.turrets] == ["INFANTRY"]
+        assert len(game.infantry.soldiers) == 2
+        game.render(app.renderer)
+    finally:
+        pygame.quit()
+
+
+def test_shop_purchases_an_infantry_wagon_with_the_keyboard() -> None:
+    config = dataclasses.replace(
+        GameConfig.load(DEFAULT_CONFIG_PATH),
+        start_gold=100,
+    )
+    app = App(config, initial_scene="shop")
+    try:
+        game = app.scene_manager.current
+        before = game.train.wagon_count
+
+        _press(app, pygame.K_5)
+
+        assert game.train.wagons[-1] == "INFANTRY"
+        assert game.combat.turrets[-1].kind == "INFANTRY"
+        assert game.combat.turrets[-1].index == before
+        assert game.state.total_purchased == 1
+        game.render(app.renderer)
+    finally:
+        pygame.quit()
+
+
 def test_locomotive_cannon_kills_a_monster() -> None:
     config = GameConfig.load(DEFAULT_CONFIG_PATH)
     app = App(config, initial_scene="game")

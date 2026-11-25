@@ -6,6 +6,7 @@ import math
 from dataclasses import dataclass
 
 from game.core.combat import Blast, CombatSystem, Shot
+from game.core.config import INFANTRY_WAGON
 from game.core.train import Train
 from game.view.renderer import Renderer
 from game.view.theme import Color, Theme
@@ -24,6 +25,7 @@ _TURRET_COLORS: dict[str, Color] = {
 }
 _SHOT_COLORS: dict[str, Color] = {
     "CANNON": _CANNON_COLOR,
+    "INFANTRY": (204, 226, 172),
     **_TURRET_COLORS,
 }
 
@@ -111,6 +113,8 @@ class TurretLayer:
             )
 
         for turret in combat.turrets:
+            if turret.kind == INFANTRY_WAGON:
+                continue
             car_index = turret.index + 1
             if car_index >= len(cars):
                 continue

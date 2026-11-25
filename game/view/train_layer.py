@@ -13,6 +13,7 @@ _WAGON_COLORS: dict[str, Color] = {
     "ICE": (110, 178, 210),
     "MORTAR": (180, 156, 92),
     "SNIPER": (156, 124, 196),
+    "INFANTRY": (108, 168, 118),
 }
 
 
