@@ -149,13 +149,60 @@ def test_add_wagon_appends_a_car_to_the_back() -> None:
     train = _train(wagons=["ICE"])
     train.advance(100.0)
 
-    train.add_wagon("MORTAR")
+    train.add_wagon("MORTAR", max_hp=30.0)
 
     assert train.wagons == ["ICE", "MORTAR"]
     assert train.wagon_count == 2
+    assert train.wagon_health == pytest.approx([30.0, 30.0])
+    assert train.wagon_max_health == pytest.approx([30.0, 30.0])
     cars = train.car_samples()
     assert [car.kind for car in cars] == [LOCOMOTIVE, "ICE", "MORTAR"]
     assert cars[-1].offset == pytest.approx(80.0)
+    assert cars[-1].hp == pytest.approx(30.0)
+    assert cars[-1].max_hp == pytest.approx(30.0)
+
+
+def test_wagons_start_with_full_health() -> None:
+    train = _train(wagons=["ICE", "MORTAR"])
+
+    assert train.wagon_health == pytest.approx([30.0, 30.0])
+    assert train.wagon_max_health == pytest.approx([30.0, 30.0])
+
+
+def test_damage_wagon_reduces_health_before_destruction() -> None:
+    train = _train(wagons=["ICE", "MORTAR"])
+
+    destroyed = train.damage_wagon(0, 12.0)
+
+    assert destroyed is False
+    assert train.wagon_health == pytest.approx([18.0, 30.0])
+    assert train.wagons == ["ICE", "MORTAR"]
+
+
+def test_destroyed_middle_wagon_shifts_the_rest_forward() -> None:
+    train = _train(wagons=["ICE", "MORTAR", "SNIPER"], travelled=100.0)
+
+    destroyed = train.damage_wagon(1, 30.0)
+
+    assert destroyed is True
+    assert train.wagons == ["ICE", "SNIPER"]
+    assert train.wagon_health == pytest.approx([30.0, 30.0])
+    after = train.car_samples()
+    assert [car.kind for car in after] == [LOCOMOTIVE, "ICE", "SNIPER"]
+    assert after[2].sample.position == pytest.approx((20.0, 0.0))
+    assert after[2].offset == pytest.approx(80.0)
+
+
+def test_nearest_car_can_be_a_wagon_or_the_locomotive() -> None:
+    train = _train(wagons=["ICE"], travelled=50.0)
+
+    assert train.nearest_car((100.0, 0.0)).is_locomotive
+    assert train.nearest_car((0.0, 0.0)).kind == "ICE"
+
+
+def test_health_must_match_the_wagon_count() -> None:
+    with pytest.raises(ValueError, match="health"):
+        _train(wagons=["ICE"], wagon_health=[30.0, 30.0])
 
 
 @pytest.mark.parametrize("kind", ["", None])

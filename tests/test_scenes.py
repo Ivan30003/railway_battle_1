@@ -150,6 +150,39 @@ def test_monsters_damage_crush_and_defeat() -> None:
         pygame.quit()
 
 
+def test_destroyed_wagon_disappears_with_its_turret() -> None:
+    config = dataclasses.replace(
+        GameConfig.load(DEFAULT_CONFIG_PATH),
+        start_wagons=("ICE", "MORTAR"),
+    )
+    app = App(config, initial_scene="game")
+    try:
+        game = app.scene_manager.current
+        game.combat.cannon.range = -1.0
+        wagon = game.train.car_samples()[1]
+        direction = wagon.sample.direction
+        game.monsters.monsters = [
+            _fast_monster(
+                (
+                    wagon.sample.position[0] - direction[1] * 30.0,
+                    wagon.sample.position[1] + direction[0] * 30.0,
+                )
+            )
+        ]
+        game.train.wagon_health[0] = 5.0
+        locomotive_hp = game.state.locomotive_hp
+
+        game.update(0.01, app.input)
+
+        assert game.train.wagons == ["MORTAR"]
+        assert game.state.locomotive_hp == pytest.approx(locomotive_hp)
+        assert [turret.kind for turret in game.combat.turrets] == ["MORTAR"]
+        assert [turret.index for turret in game.combat.turrets] == [0]
+        game.render(app.renderer)
+    finally:
+        pygame.quit()
+
+
 def test_locomotive_cannon_kills_a_monster() -> None:
     config = GameConfig.load(DEFAULT_CONFIG_PATH)
     app = App(config, initial_scene="game")
@@ -316,6 +349,7 @@ def test_map_switch_keeps_gold_hp_and_wagons() -> None:
         game.state.stats.crushed = 3
         game.train.add_wagon("MORTAR")
         game.combat.add_wagon("MORTAR")
+        game.train.wagon_health[0] = 12.0
         first_map = game.map_data
         assert first_map.source_path.name == "map1.txt"
         assert app.map_count == 2
@@ -337,6 +371,8 @@ def test_map_switch_keeps_gold_hp_and_wagons() -> None:
         assert game.state.stats.gold_earned == 21
         expected_wagons = list(config.start_wagons) + ["MORTAR"]
         assert game.train.wagons == expected_wagons
+        assert game.train.wagon_health[0] == pytest.approx(12.0)
+        assert game.train.wagon_health[1:] == pytest.approx([30.0, 30.0])
         assert [turret.kind for turret in game.combat.turrets] == expected_wagons
         assert game.train.travelled == 0.0
         assert game.monsters.monsters == []
@@ -483,7 +519,7 @@ def test_spawn_cooldown_uses_purchases_not_the_live_train() -> None:
         assert game.state.total_purchased == 1
         assert game.monsters.spawner.cooldown == pytest.approx(1.75)
 
-        game.train.wagons.pop()  # simulate a destroyed wagon
+        game.train.remove_wagon(-1)  # simulate a destroyed wagon
         assert len(game.train.wagons) == len(config.start_wagons)
         assert game.monsters.spawner.cooldown == pytest.approx(1.75)
     finally:

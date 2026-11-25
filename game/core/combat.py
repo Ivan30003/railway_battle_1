@@ -186,6 +186,17 @@ class CombatSystem:
         self.turrets.append(turret)
         return turret
 
+    def remove_wagon(self, index: int) -> WagonTurret:
+        """Remove a destroyed wagon and renumber the remaining turrets."""
+        if not 0 <= index < len(self.turrets):
+            raise IndexError(f"Turret index out of range: {index}")
+        for turret in self.turrets:
+            self.reservations.release(turret.index)
+        removed = self.turrets.pop(index)
+        for new_index, turret in enumerate(self.turrets):
+            turret.index = new_index
+        return removed
+
     def update(
         self,
         dt: float,

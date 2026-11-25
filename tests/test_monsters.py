@@ -18,13 +18,15 @@ def _route() -> PathRoute:
     return PathRoute([(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0)])
 
 
-def _train(wagons: list[str] | None = None) -> Train:
-    return Train(
-        route=_route(),
-        speed=70.0,
-        wagon_spacing=40.0,
-        wagons=["ICE"] if wagons is None else wagons,
-    )
+def _train(wagons: list[str] | None = None, **kwargs: object) -> Train:
+    params: dict[str, object] = {
+        "route": _route(),
+        "speed": 70.0,
+        "wagon_spacing": 40.0,
+        "wagons": ["ICE"] if wagons is None else wagons,
+    }
+    params.update(kwargs)
+    return Train(**params)  # type: ignore[arg-type]
 
 
 def _spawn(**overrides: object) -> SpawnConfig:
@@ -235,7 +237,7 @@ def test_initial_timer_uses_the_purchase_scaled_cooldown() -> None:
 def test_monster_moves_towards_the_locomotive() -> None:
     system = _system([_monster(position=(0.0, 100.0))])
 
-    result = system.update(0.5, _train(), train_moving=False)
+    result = system.update(0.5, _train(wagons=[]), train_moving=False)
 
     assert result.damage == 0.0
     assert system.monsters[0].position == pytest.approx((0.0, 60.0))
@@ -257,13 +259,13 @@ def test_slow_reduces_movement_and_expires() -> None:
     monster.apply_slow(0.5, 1.0, max_percent=0.8)
     system = _system([monster])
 
-    system.update(0.5, _train(), train_moving=False)
+    system.update(0.5, _train(wagons=[]), train_moving=False)
 
     assert monster.position == pytest.approx((0.0, 180.0))
     assert monster.slow_timer == pytest.approx(0.5)
     assert monster.is_slowed is True
 
-    system.update(0.6, _train(), train_moving=False)
+    system.update(0.6, _train(wagons=[]), train_moving=False)
 
     assert monster.is_slowed is False
     assert monster.slow_percent == pytest.approx(0.0)
@@ -300,14 +302,51 @@ def test_slow_effect_is_cleared_after_expiring() -> None:
 def test_monster_attacks_on_interval() -> None:
     system = _system([_monster(position=(0.0, 30.0))])
 
-    first = system.update(0.1, _train(), train_moving=False)
+    first = system.update(0.1, _train(wagons=[]), train_moving=False)
     assert first.damage == pytest.approx(5.0)
     assert system.monsters[0].attack_timer == pytest.approx(1.0)
 
-    second = system.update(0.4, _train(), train_moving=False)
+    second = system.update(0.4, _train(wagons=[]), train_moving=False)
     assert second.damage == 0.0
-    third = system.update(0.6, _train(), train_moving=False)
+    third = system.update(0.6, _train(wagons=[]), train_moving=False)
     assert third.damage == pytest.approx(5.0)
+
+
+def test_monster_damages_the_nearest_wagon() -> None:
+    train = _train(wagons=["ICE"])
+    system = _system([_monster(position=(0.0, 70.0))])
+
+    result = system.update(0.01, train, train_moving=False)
+
+    assert result.damage == 0.0
+    assert result.destroyed_wagons == ()
+    assert train.wagon_health == pytest.approx([25.0])
+
+
+def test_monster_damages_the_locomotive_when_it_is_nearest() -> None:
+    train = _train(wagons=["ICE"])
+    system = _system([_monster(position=(0.0, 10.0))])
+
+    result = system.update(0.01, train, train_moving=False)
+
+    assert result.damage == pytest.approx(5.0)
+    assert train.wagon_health == pytest.approx([30.0])
+
+
+def test_destroyed_wagon_is_removed_and_the_rest_moves_forward() -> None:
+    train = _train(
+        wagons=["ICE", "MORTAR"],
+        wagon_health=[5.0, 30.0],
+        wagon_max_health=[30.0, 30.0],
+    )
+    system = _system([_monster(position=(0.0, 60.0))])
+
+    result = system.update(0.01, train, train_moving=False)
+
+    assert result.destroyed_wagons == (0,)
+    assert train.wagons == ["MORTAR"]
+    assert train.wagon_health == pytest.approx([30.0])
+    assert train.car_samples()[1].sample.position == pytest.approx((0.0, 40.0))
 
 
 def test_moving_train_crushes_a_monster_for_gold() -> None:
@@ -334,7 +373,7 @@ def test_crush_uses_the_collision_radius() -> None:
 def test_stationary_train_does_not_crush() -> None:
     system = _system([_monster(position=(0.0, 0.0))])
 
-    result = system.update(0.1, _train(), train_moving=False)
+    result = system.update(0.1, _train(wagons=[]), train_moving=False)
 
     assert result.crushed == 0
     assert result.damage == pytest.approx(5.0)

@@ -23,11 +23,29 @@ class TrainLayer:
         self.theme = theme
 
     def draw(self, renderer: Renderer, train: Train, tile_size: int) -> None:
-        for car in reversed(train.car_samples()):
+        cars = train.car_samples()
+        for car in reversed(cars):
             if car.kind == LOCOMOTIVE:
                 self._draw_locomotive(renderer, car, tile_size)
             else:
                 self._draw_wagon(renderer, car, tile_size)
+        for car in cars:
+            if car.is_wagon:
+                self._draw_health_bar(renderer, car, tile_size)
+
+    def _draw_health_bar(self, renderer: Renderer, car: TrainCar, tile_size: int) -> None:
+        width = tile_size * 0.82
+        height = max(3.0, tile_size * 0.1)
+        center_x, center_y = car.sample.position
+        left = center_x - width / 2.0
+        top = center_y - tile_size * 0.58 - height
+        ratio = max(0.0, min(1.0, car.hp / car.max_hp)) if car.max_hp > 0.0 else 0.0
+        color = self.theme.success if ratio > 0.5 else self.theme.accent
+        if ratio <= 0.25:
+            color = self.theme.danger
+        renderer.draw_rect((10, 12, 16), (left - 1.0, top - 1.0, width + 2.0, height + 2.0))
+        renderer.draw_rect(self.theme.panel_border, (left, top, width, height))
+        renderer.draw_rect(color, (left, top, width * ratio, height))
 
     # ------------------------------------------------------------------
     # Locomotive

@@ -222,6 +222,7 @@ class MonsterUpdate:
     damage: float = 0.0
     gold: int = 0
     crushed: int = 0
+    destroyed_wagons: tuple[int, ...] = ()
 
 
 class MonsterSystem:
@@ -271,25 +272,40 @@ class MonsterSystem:
                 self.monsters.append(monster)
         self.monsters = [monster for monster in self.monsters if monster.is_alive]
 
-        target = train.locomotive_sample().position
+        destroyed_wagons: list[int] = []
+        damage = 0.0
         for monster in self.monsters:
             monster.attack_timer = max(0.0, monster.attack_timer - dt)
             monster.tick_slow(dt)
-            if monster.distance_to(target) > self.attack_range + monster.radius:
-                monster.move_toward(target, dt)
+            target = train.nearest_car(monster.position)
+            target_position = target.sample.position
+            if monster.distance_to(target_position) > self.attack_range + monster.radius:
+                monster.move_toward(target_position, dt)
 
         crushed, gold = self._crush(train) if train_moving else (0, 0)
 
-        damage = 0.0
         for monster in self.monsters:
+            target = train.nearest_car(monster.position)
+            target_position = target.sample.position
             reach = self.attack_range + monster.radius
-            if monster.distance_to(target) <= reach and monster.attack_timer <= 0.0:
+            if monster.distance_to(target_position) > reach:
+                continue
+            if monster.attack_timer > 0.0:
+                continue
+            monster.attack_timer = monster.attack_interval
+            if target.wagon_index is None:
                 damage += monster.damage
-                monster.attack_timer = monster.attack_interval
+            elif train.damage_wagon(target.wagon_index, monster.damage):
+                destroyed_wagons.append(target.wagon_index)
 
         self.monsters = [monster for monster in self.monsters if monster.is_alive]
         self.crushed_total += crushed
-        return MonsterUpdate(damage=damage, gold=gold, crushed=crushed)
+        return MonsterUpdate(
+            damage=damage,
+            gold=gold,
+            crushed=crushed,
+            destroyed_wagons=tuple(destroyed_wagons),
+        )
 
     def _crush(self, train: Train) -> tuple[int, int]:
         cars = train.car_samples()

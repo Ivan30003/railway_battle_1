@@ -91,13 +91,26 @@ class GameScene(Scene):
     # ------------------------------------------------------------------
     # Run and level lifecycle
     # ------------------------------------------------------------------
-    def _create_systems(self, wagons: Sequence[str]) -> None:
+    def _create_systems(
+        self,
+        wagons: Sequence[str],
+        wagon_health: Sequence[float] | None = None,
+        wagon_max_health: Sequence[float] | None = None,
+    ) -> None:
         """Build train, monsters and combat for the current map."""
+        max_health = (
+            list(wagon_max_health)
+            if wagon_max_health is not None
+            else [self.app.config.wagon_configs[kind].hp for kind in wagons]
+        )
+        health = list(wagon_health) if wagon_health is not None else list(max_health)
         self.train = Train(
             route=self.map_data.route,
             speed=self.app.config.train_speed,
             wagon_spacing=self.app.config.wagon_spacing,
             wagons=list(wagons),
+            wagon_health=health,
+            wagon_max_health=max_health,
         )
         self.monsters = MonsterSystem(
             self.app.config.spawn,
@@ -123,10 +136,12 @@ class GameScene(Scene):
     def _load_level(self) -> None:
         """Switch to the current map while keeping the run-wide state."""
         wagons = list(self.train.wagons)
+        wagon_health = list(self.train.wagon_health)
+        wagon_max_health = list(self.train.wagon_max_health)
         self.map_data = self.app.set_map(self.state.map_index)
         self.camera = Camera()
         self.turret_layer = TurretLayer(self.app.theme)
-        self._create_systems(wagons)
+        self._create_systems(wagons, wagon_health, wagon_max_health)
         self._lap_flash = 0.0
         self._damage_flash = 0.0
         self._crush_slow = 0.0
@@ -295,6 +310,9 @@ class GameScene(Scene):
         if result.gold:
             self.state.gold += result.gold
             stats.gold_earned += result.gold
+        if result.destroyed_wagons:
+            for index in result.destroyed_wagons:
+                self.combat.remove_wagon(index)
         if result.damage:
             self.state.locomotive_hp = max(0.0, self.state.locomotive_hp - result.damage)
             self._damage_flash = 0.45
@@ -341,7 +359,10 @@ class GameScene(Scene):
         self.state.gold = purchase.gold_after
         self.state.total_purchased = purchase.purchased_after
         self.state.stats.wagons_bought += 1
-        self.train.add_wagon(wagon_type)
+        self.train.add_wagon(
+            wagon_type,
+            max_hp=self.app.config.wagon_configs[wagon_type].hp,
+        )
         self.combat.add_wagon(wagon_type)
         self._shop_message = (
             f"Куплен вагон: {_WAGON_LABELS[wagon_type]} за {purchase.price} золота"

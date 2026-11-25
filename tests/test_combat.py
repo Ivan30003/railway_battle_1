@@ -337,6 +337,23 @@ def test_add_wagon_rejects_unknown_kinds() -> None:
         system.add_wagon("MORTAR")
 
 
+def test_remove_wagon_renumbers_the_remaining_turrets() -> None:
+    system = _combat(
+        ["MACHINEGUN", "ICE", "MORTAR"],
+        {
+            "MACHINEGUN": _wagon(),
+            "ICE": _wagon(reserve="none"),
+            "MORTAR": _wagon(reserve="primary"),
+        },
+    )
+
+    removed = system.remove_wagon(1)
+
+    assert removed.kind == "ICE"
+    assert [turret.kind for turret in system.turrets] == ["MACHINEGUN", "MORTAR"]
+    assert [turret.index for turret in system.turrets] == [0, 1]
+
+
 # ----------------------------------------------------------------------
 # Mortar AoE
 # ----------------------------------------------------------------------

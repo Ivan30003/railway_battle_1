@@ -93,7 +93,7 @@ def test_wagon_override_merges_fields() -> None:
 
     machinegun = config.wagon_configs["MACHINEGUN"]
     assert machinegun.damage == 9.0
-    assert machinegun.hp == 50.0
+    assert machinegun.hp == 30.0
     assert machinegun.reserve == "target"
 
 
