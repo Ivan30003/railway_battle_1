@@ -16,8 +16,10 @@ tokens. Lines may be commented with ``#``; the loader also accepts CRLF, a
 UTF-8 BOM and arbitrary leading/trailing whitespace.
 
 A map is valid only when every track tile belongs to one closed loop and the
-loop can be traversed from ``START`` in ``DIR``. Crossings (``X``) are passed
-straight through and may be visited twice when the loop crosses itself.
+loop can be traversed from ``START`` in ``DIR``. Crossings (``XX``) are passed
+straight through and may be visited twice when the loop crosses itself. The
+direction of travel through a crossing is inherited from the previous tile, so
+a train entering horizontally leaves horizontally and vice versa.
 """
 
 from __future__ import annotations

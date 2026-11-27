@@ -55,7 +55,7 @@ class Tile(Enum):
     EMPTY = "00"
     STRAIGHT_VERTICAL = "SV"
     STRAIGHT_HORIZONTAL = "SH"
-    CROSSING = "X"
+    CROSSING = "XX"
     TURN_DOWN_LEFT = "LD"
     TURN_DOWN_RIGHT = "RD"
     TURN_UP_LEFT = "LU"

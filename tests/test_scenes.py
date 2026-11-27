@@ -194,7 +194,9 @@ def test_infantry_wagon_drops_soldiers_and_renders() -> None:
         game.combat.cannon.range = -1.0
         game.monsters.spawner._timer = 10000.0
 
-        game.update(8.05, app.input)
+        drop_interval = config.wagon_configs["INFANTRY"].drop_interval
+        assert drop_interval is not None
+        game.update(drop_interval + 0.05, app.input)
 
         assert [turret.kind for turret in game.combat.turrets] == ["INFANTRY"]
         assert len(game.infantry.soldiers) == 2

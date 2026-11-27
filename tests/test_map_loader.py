@@ -22,7 +22,7 @@ RU SH LU
 CROSSING = """\
 START=0,0
 DIR=RIGHT
-RD X LD
+RD XX LD
 SV 00 SV
 RU SH LU
 """
@@ -31,7 +31,7 @@ FIGURE_EIGHT = """\
 START=1,1
 DIR=LEFT
 RD LD 00
-RU X LD
+RU XX LD
 00 RU LU
 """
 
@@ -70,6 +70,30 @@ def test_crossing_is_passed_straight_through() -> None:
     assert map_data.route_tiles[2] == (2, 0)
     assert map_data.route_tiles.count((1, 0)) == 1
     assert 208.0 < map_data.route_length < 256.0
+
+
+def test_shipped_map2_crossing_is_passed_vertically_and_horizontally() -> None:
+    map_data = load_map(ROOT / "maps" / "map2.txt", tile_size=32)
+    crossings = [
+        (x, y) for x, y, tile in map_data.grid.iter_tiles() if tile is Tile.CROSSING
+    ]
+
+    assert crossings == [(11, 6)]
+    crossing = crossings[0]
+    assert map_data.route_tiles.count(crossing) == 2
+
+    passages = []
+    for index, coord in enumerate(map_data.route_tiles):
+        if coord != crossing:
+            continue
+        previous = map_data.route_tiles[index - 1]
+        following = map_data.route_tiles[(index + 1) % len(map_data.route_tiles)]
+        passages.append((previous, following))
+
+    # One pass arrives from the north and leaves south, the other arrives from
+    # the west and leaves east: the crossing keeps the incoming direction.
+    assert ((11, 5), (11, 7)) in passages
+    assert ((10, 6), (12, 6)) in passages
 
 
 def test_figure_eight_uses_crossing_twice() -> None:

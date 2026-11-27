@@ -46,7 +46,7 @@ def test_shipped_config_loads() -> None:
     assert config.wagon_configs["MORTAR"].aoe_radius == 64.0
     assert config.wagon_configs["ICE"].aoe_radius == 48.0
     assert config.wagon_configs["ICE"].slow_percent == 0.2
-    assert config.wagon_configs["INFANTRY"].drop_interval == 8.0
+    assert config.wagon_configs["INFANTRY"].drop_interval == 28.0
     assert config.wagon_configs["INFANTRY"].soldiers_per_drop == 2
     assert config.wagon_configs["INFANTRY"].drop_offset == 26.0
     assert config.wagon_configs["INFANTRY"].soldier_range == 120.0

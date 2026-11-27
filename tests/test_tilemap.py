@@ -29,7 +29,7 @@ def test_direction_rejects_unknown_header() -> None:
     [
         ("SV", {Direction.NORTH, Direction.SOUTH}),
         ("SH", {Direction.EAST, Direction.WEST}),
-        ("X", {Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST}),
+        ("XX", {Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST}),
         ("LD", {Direction.SOUTH, Direction.WEST}),
         ("RD", {Direction.SOUTH, Direction.EAST}),
         ("LU", {Direction.NORTH, Direction.WEST}),
@@ -48,6 +48,11 @@ def test_empty_tile_is_not_path() -> None:
 def test_unknown_token_raises() -> None:
     with pytest.raises(ValueError, match="Unknown tile token"):
         Tile.from_token("ZZ")
+
+
+def test_legacy_single_x_crossing_token_is_rejected() -> None:
+    with pytest.raises(ValueError, match="Unknown tile token"):
+        Tile.from_token("X")
 
 
 def test_tile_grid_basics() -> None:
