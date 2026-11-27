@@ -24,6 +24,8 @@ def test_shipped_config_loads() -> None:
     assert config.start_gold == 0
     assert config.maps == ("maps/map1.txt", "maps/map2.txt")
     assert config.tile_size == 32
+    assert config.curved_turns is True
+    assert config.turn_curvatures == (0.4, 0.55, 0.75)
     assert set(config.wagon_configs) == {
         "MACHINEGUN",
         "ICE",
@@ -64,6 +66,8 @@ def test_empty_object_uses_defaults() -> None:
 
     assert config.window.width == 1280
     assert config.locomotive_hp == 100.0
+    assert config.curved_turns is True
+    assert config.turn_curvatures == (0.4, 0.55, 0.75)
     assert config.start_wagons == ("MACHINEGUN", "ICE")
     assert config.crush_slow_factor == 0.5
     assert config.cannon.range == 450.0
@@ -128,6 +132,11 @@ def test_invalid_json_raises(tmp_path: Path) -> None:
     [
         ({"tile_size": -1}, "tile_size"),
         ({"tile_size": True}, "tile_size"),
+        ({"curved_turns": "yes"}, "curved_turns"),
+        ({"turn_curvatures": []}, "turn_curvatures"),
+        ({"turn_curvatures": [0]}, r"turn_curvatures\[0\]"),
+        ({"turn_curvatures": [1.5]}, r"turn_curvatures\[0\]"),
+        ({"turn_curvatures": ["wide"]}, r"turn_curvatures\[0\]"),
         ({"window": {"resizable": "yes"}}, "window.resizable"),
         ({"ice_slow_per_wagon": -0.1}, "ice_slow_per_wagon"),
         ({"ice_slow_max": 1.5}, "ice_slow_max"),

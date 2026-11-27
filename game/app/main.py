@@ -69,7 +69,13 @@ class App:
         self.map_data: MapData
         self.map_paths = _resolve_map_paths(config, map_path)
         self.levels: tuple[MapData, ...] = tuple(
-            load_map(path, tile_size=config.tile_size) for path in self.map_paths
+            load_map(
+                path,
+                tile_size=config.tile_size,
+                curved_turns=config.curved_turns,
+                turn_curvatures=config.turn_curvatures,
+            )
+            for path in self.map_paths
         )
         self.map_data = self.levels[0]
         self.run_stats: RunStats | None = None

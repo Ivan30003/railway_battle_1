@@ -99,6 +99,8 @@ class MonsterConfig:
 class GameConfig:
     window: WindowConfig
     tile_size: int
+    curved_turns: bool
+    turn_curvatures: tuple[float, ...]
     train_speed: float
     wagon_spacing: float
     rounds_per_map: int
@@ -200,6 +202,9 @@ class GameConfig:
             )
         start_wagons = _parse_start_wagons(merged.get("start_wagons"), wagon_configs)
 
+        curved_turns = _boolean(merged.get("curved_turns"), "curved_turns")
+        turn_curvatures = _curvature_list(merged.get("turn_curvatures"))
+
         ice_slow_per_wagon = _fraction(merged.get("ice_slow_per_wagon"), "ice_slow_per_wagon")
         ice_slow_max = _fraction(merged.get("ice_slow_max"), "ice_slow_max")
         if ice_slow_max > 1.0:
@@ -208,6 +213,8 @@ class GameConfig:
         return cls(
             window=window_cfg,
             tile_size=_positive_int(merged.get("tile_size"), "tile_size"),
+            curved_turns=curved_turns,
+            turn_curvatures=turn_curvatures,
             train_speed=_positive_number(merged.get("train_speed"), "train_speed"),
             wagon_spacing=_positive_number(merged.get("wagon_spacing"), "wagon_spacing"),
             rounds_per_map=_positive_int(merged.get("rounds_per_map"), "rounds_per_map"),
@@ -516,6 +523,19 @@ def _number(value: Any, field: str) -> float:
     return float(value)
 
 
+def _curvature_list(value: Any) -> tuple[float, ...]:
+    field = "turn_curvatures"
+    if not isinstance(value, list) or not value:
+        raise ConfigError(f"{field} must be a non-empty list of numbers")
+    result: list[float] = []
+    for index, item in enumerate(value):
+        number = _number(item, f"{field}[{index}]")
+        if not 0.0 < number <= 1.0:
+            raise ConfigError(f"{field}[{index}] must be greater than 0 and at most 1")
+        result.append(number)
+    return tuple(result)
+
+
 def _fraction(value: Any, field: str) -> float:
     number = _number(value, field)
     if not 0.0 <= number <= 1.0:
@@ -537,6 +557,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "vsync": True,
     },
     "tile_size": 32,
+    "curved_turns": True,
+    "turn_curvatures": [0.4, 0.55, 0.75],
     "train_speed": 70,
     "wagon_spacing": 44,
     "rounds_per_map": 5,

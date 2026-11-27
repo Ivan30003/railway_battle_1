@@ -22,17 +22,27 @@ straight through and may be visited twice when the loop crosses itself.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
 from game.core.errors import MapError
 from game.core.path import PathRoute
 from game.core.tilemap import Direction, Tile, TileGrid
+from game.core.turn_curve import DEFAULT_CURVATURES, sample_turn, select_curvature
 
 Coord = tuple[int, int]
 
 _KNOWN_HEADERS = {"START", "DIR"}
 _MAX_CROSSING_VISITS = 2
+_TURN_TILES = frozenset(
+    {
+        Tile.TURN_DOWN_LEFT,
+        Tile.TURN_DOWN_RIGHT,
+        Tile.TURN_UP_LEFT,
+        Tile.TURN_UP_RIGHT,
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -68,20 +78,34 @@ class MapData:
         return self.route.total_length
 
 
-def load_map(path: str | Path, *, tile_size: int = 32) -> MapData:
+def load_map(
+    path: str | Path,
+    *,
+    tile_size: int = 32,
+    curved_turns: bool = True,
+    turn_curvatures: tuple[float, ...] = DEFAULT_CURVATURES,
+) -> MapData:
     """Load and validate a map from disk."""
     map_path = Path(path)
     try:
         text = map_path.read_text(encoding="utf-8-sig")
     except OSError as exc:
         raise MapError(f"Cannot read map {map_path}: {exc}") from exc
-    return parse_map(text, tile_size=tile_size, source_path=map_path)
+    return parse_map(
+        text,
+        tile_size=tile_size,
+        curved_turns=curved_turns,
+        turn_curvatures=turn_curvatures,
+        source_path=map_path,
+    )
 
 
 def parse_map(
     text: str,
     *,
     tile_size: int = 32,
+    curved_turns: bool = True,
+    turn_curvatures: tuple[float, ...] = DEFAULT_CURVATURES,
     source_path: Path | None = None,
 ) -> MapData:
     """Parse and validate map text."""
@@ -107,9 +131,14 @@ def parse_map(
         )
 
     route_tiles = _walk_route(grid, start, direction)
-    points = [grid.tile_center(x, y, tile_size) for x, y in route_tiles]
     try:
-        route = PathRoute(points)
+        route = _build_route(
+            grid,
+            route_tiles,
+            tile_size,
+            curved_turns=curved_turns,
+            turn_curvatures=turn_curvatures,
+        )
     except ValueError as exc:  # pragma: no cover - guarded by validation above
         raise MapError(f"Cannot build route: {exc}") from exc
 
@@ -122,6 +151,73 @@ def parse_map(
         tile_size=tile_size,
         source_path=source_path,
     )
+
+
+def _build_route(
+    grid: TileGrid,
+    route_tiles: tuple[Coord, ...],
+    tile_size: int,
+    *,
+    curved_turns: bool,
+    turn_curvatures: tuple[float, ...],
+) -> PathRoute:
+    """Build the route polyline through tile centres or rounded turns.
+
+    With ``curved_turns`` disabled the route is the classic polyline through
+    tile centres, which produces sharp 90-degree corners. With it enabled the
+    path crosses every shared tile edge at its midpoint; turn tiles replace the
+    corner with a sampled Bezier arc, while straight tiles stay straight.
+    """
+    if not curved_turns:
+        return PathRoute([grid.tile_center(x, y, tile_size) for x, y in route_tiles])
+
+    count = len(route_tiles)
+    centres = {coord: grid.tile_center(*coord, tile_size) for coord in route_tiles}
+    half_size = tile_size / 2.0
+    points: list[tuple[float, float]] = []
+
+    for index, coord in enumerate(route_tiles):
+        centre = centres[coord]
+        previous = centres[route_tiles[index - 1]]
+        following = centres[route_tiles[(index + 1) % count]]
+        entry = _midpoint(previous, centre)
+        exit_point = _midpoint(centre, following)
+        tile = grid.get(*coord)
+
+        if tile in _TURN_TILES:
+            curvature = select_curvature(coord[0], coord[1], turn_curvatures)
+            segment = sample_turn(
+                entry,
+                exit_point,
+                _unit(previous, centre),
+                _unit(centre, following),
+                half_size=half_size,
+                curvature=curvature,
+            )
+        else:
+            segment = (entry, exit_point)
+
+        for point in segment:
+            if not points or point != points[-1]:
+                points.append(point)
+
+    return PathRoute(points)
+
+
+def _midpoint(a: tuple[float, float], b: tuple[float, float]) -> tuple[float, float]:
+    return ((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0)
+
+
+def _unit(
+    start: tuple[float, float],
+    end: tuple[float, float],
+) -> tuple[float, float]:
+    dx = end[0] - start[0]
+    dy = end[1] - start[1]
+    length = math.hypot(dx, dy)
+    if length <= 0.0:
+        raise ValueError("Cannot derive a direction from coincident tile centres")
+    return (dx / length, dy / length)
 
 
 def _split_headers_and_rows(

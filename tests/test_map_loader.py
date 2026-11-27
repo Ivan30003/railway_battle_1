@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import pytest
@@ -44,9 +45,21 @@ def test_simple_ring_parses() -> None:
     assert map_data.direction is Direction.EAST
     assert len(map_data.route_tiles) == 8
     assert map_data.track_tile_count == 8
-    assert map_data.route_length == pytest.approx(8 * 32)
+    # Curved turns replace the sharp corners, so the route is shorter than the
+    # old centre-to-centre polyline but still spans the ring.
+    assert 208.0 < map_data.route_length < 256.0
+    assert len(map_data.route.points) > len(map_data.route_tiles)
+    assert map_data.route.sample(0.0).position == pytest.approx((16.0, 32.0))
     assert map_data.pixel_size == (96, 96)
     assert map_data.grid.get(0, 0) is Tile.TURN_DOWN_RIGHT
+
+
+def test_curved_turns_can_be_disabled() -> None:
+    map_data = parse_map(RING, tile_size=32, curved_turns=False)
+
+    assert map_data.route_length == pytest.approx(8 * 32)
+    assert len(map_data.route.points) == 8
+    assert map_data.route.sample(0.0).position == pytest.approx((16.0, 16.0))
 
 
 def test_crossing_is_passed_straight_through() -> None:
@@ -56,7 +69,7 @@ def test_crossing_is_passed_straight_through() -> None:
     assert map_data.route_tiles[1] == (1, 0)
     assert map_data.route_tiles[2] == (2, 0)
     assert map_data.route_tiles.count((1, 0)) == 1
-    assert map_data.route_length == pytest.approx(8 * 32)
+    assert 208.0 < map_data.route_length < 256.0
 
 
 def test_figure_eight_uses_crossing_twice() -> None:
@@ -66,7 +79,29 @@ def test_figure_eight_uses_crossing_twice() -> None:
     assert map_data.direction is Direction.WEST
     assert map_data.route_tiles.count((1, 1)) == 2
     assert len(map_data.route_tiles) == 8
-    assert map_data.route_length == pytest.approx(8 * 32)
+    assert 0.0 < map_data.route_length < 8 * 32
+
+
+def test_curved_route_turns_gradually() -> None:
+    map_data = parse_map(RING, tile_size=32)
+    points = map_data.route.points
+    count = len(points)
+
+    largest = 0.0
+    for index in range(count):
+        first = points[index]
+        second = points[(index + 1) % count]
+        third = points[(index + 2) % count]
+        a = (second[0] - first[0], second[1] - first[1])
+        b = (third[0] - second[0], third[1] - second[1])
+        a_len = math.hypot(*a)
+        b_len = math.hypot(*b)
+        if a_len == 0.0 or b_len == 0.0:
+            continue
+        cosine = max(-1.0, min(1.0, (a[0] * b[0] + a[1] * b[1]) / (a_len * b_len)))
+        largest = max(largest, math.degrees(math.acos(cosine)))
+
+    assert largest < 10.0
 
 
 def test_comments_bom_crlf_and_header_order() -> None:
@@ -99,9 +134,15 @@ def test_shipped_maps_are_valid(name: str) -> None:
     assert map_data.route_length > 0
     first = map_data.route.sample(0.0)
     middle = map_data.route.sample(map_data.route_length / 2.0)
-    assert first.position == pytest.approx(
-        map_data.grid.tile_center(*map_data.start, map_data.tile_size)
+    start_centre = map_data.grid.tile_center(*map_data.start, map_data.tile_size)
+    previous_centre = map_data.grid.tile_center(
+        *map_data.route_tiles[-1], map_data.tile_size
     )
+    entry = (
+        (start_centre[0] + previous_centre[0]) / 2.0,
+        (start_centre[1] + previous_centre[1]) / 2.0,
+    )
+    assert first.position == pytest.approx(entry)
     assert middle.position != pytest.approx(first.position)
     assert map_data.route.sample(map_data.route_length).position == pytest.approx(
         first.position

@@ -6,6 +6,12 @@
     "vsync": true
   },
   "tile_size": 32,
+  "curved_turns": true,
+  "turn_curvatures": [
+    0.4,
+    0.55,
+    0.75
+  ],
   "train_speed": 70,
   "wagon_spacing": 44,
   "rounds_per_map": 5,
@@ -98,7 +104,7 @@
       "aim_threshold_deg": 7,
       "priority": null,
       "reserve": "none",
-      "drop_interval": 8.0,
+      "drop_interval": 28.0,
       "soldiers_per_drop": 2,
       "drop_offset": 26,
       "soldier_range": 120,
